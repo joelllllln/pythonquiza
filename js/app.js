@@ -2,6 +2,7 @@
 
 import { Runner } from './runner.js';
 import { Store } from './store.js';
+import { buildIndex, getQuestion, templateCount, handwrittenCount } from './bank.js';
 import { firebaseEnabled } from './config.js';
 import {
   START_RATING, levelStr, parSeconds, pickQuestion,
@@ -9,7 +10,11 @@ import {
 } from './rating.js';
 
 const $ = (id) => document.getElementById(id);
-const BANK = window.QUESTIONS || [];
+
+// The light index: one small record per question. Full questions — prompt,
+// tests, solution — are rebuilt from their id on demand.
+const INDEX = buildIndex();
+const BANK_ROWS_SHOWN = 300;
 
 const store = new Store(render);
 const runner = new Runner(onRunnerStatus);
@@ -56,6 +61,9 @@ function wireUI() {
       }
       if (b.dataset.view === 'stats') renderStats();
       if (b.dataset.view === 'bank') renderBank();
+      // CodeMirror does not lay out while it is hidden, so it comes back
+      // showing whatever it last painted. Nudge it once it is visible.
+      if (b.dataset.view === 'practice') editor.refresh();
     };
   });
 
@@ -132,9 +140,12 @@ function updateTargetLabel() {
   $('target-label').textContent = `aiming at Lv ${levelStr(target())}`;
 }
 
-function nextQuestion(forced) {
+function nextQuestion(forcedId) {
   endSession(false);
-  q = forced || pickQuestion(BANK, store.progress, { target: target(), excludeId: q && q.id });
+  const chosen = forcedId
+    ? getQuestion(forcedId)
+    : getQuestion(pickQuestion(INDEX, store.progress, { target: target(), excludeId: q && q.id }).id);
+  q = chosen;
   session = { startedAt: Date.now(), failedSubmits: 0, hints: 0, submitted: false, done: false };
 
   const st = store.progress.byQuestion[q.id];
@@ -156,6 +167,7 @@ function nextQuestion(forced) {
 
   editor.setValue(store.draft(q.id) || q.starter || '');
   editor.clearHistory();
+  editor.refresh();
   updateTargetLabel();
   startTimer();
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -197,8 +209,8 @@ async function doRun() {
   if (!(await ensurePy())) return;
   busy(true, 'running…');
   const spec = q.mode === 'stdout'
-    ? { mode: 'plain', stdin: (q.tests[0] && q.tests[0].stdin) || [] }
-    : { mode: 'plain', stdin: [] };
+    ? { mode: 'plain', stdin: (q.tests[0] && q.tests[0].stdin) || [], setup: q.setup }
+    : { mode: 'plain', stdin: [], setup: q.setup };
   const r = await runner.run(editor.getValue(), spec);
   busy(false);
   const out = $('output');
@@ -213,8 +225,8 @@ async function doSubmit() {
   if (!(await ensurePy())) return;
   busy(true, 'checking…');
   const spec = q.mode === 'stdout'
-    ? { mode: 'stdout', tests: q.tests }
-    : { mode: 'func', fn: q.fn, tests: q.tests, cmp: q.cmp || '' };
+    ? { mode: 'stdout', tests: q.tests, setup: q.setup }
+    : { mode: 'func', fn: q.fn, tests: q.tests, cmp: q.cmp || '', setup: q.setup, wrap: q.wrap };
   const r = await runner.run(editor.getValue(), spec);
   busy(false);
   session.submitted = true;
@@ -391,7 +403,10 @@ function drawChart(curve) {
 }
 
 function buildTopicFilter() {
-  const topics = [...new Set(BANK.map((x) => x.topic))].sort();
+  $('bank-note').textContent =
+    `${INDEX.length.toLocaleString()} questions — ${handwrittenCount} written by hand, ` +
+    `the rest generated from ${templateCount} templates, each a fixed question you can come back to.`;
+  const topics = [...new Set(INDEX.map((x) => x.topic))].sort();
   $('bank-topic').innerHTML = '<option value="">All topics</option>' +
     topics.map((t) => `<option>${esc(t)}</option>`).join('');
 }
@@ -402,9 +417,9 @@ function renderBank() {
   const state = $('bank-state').value;
   const p = store.progress;
 
-  const rows = BANK
+  const rows = INDEX
     .filter((x) => !topic || x.topic === topic)
-    .filter((x) => !term || (x.title + ' ' + x.topic + ' ' + x.prompt).toLowerCase().includes(term))
+    .filter((x) => !term || (x.title + ' ' + x.topic).toLowerCase().includes(term))
     .filter((x) => {
       const s = p.byQuestion[x.id];
       if (state === 'unseen') return !s;
@@ -414,7 +429,12 @@ function renderBank() {
     })
     .sort((a, b) => a.rating - b.rating);
 
-  $('bank-list').innerHTML = rows.map((x) => {
+  // Ten thousand rows would choke the DOM — show a slice and say so.
+  const shown = rows.slice(0, BANK_ROWS_SHOWN);
+  const head = `<div class="muted small">${rows.length.toLocaleString()} question${rows.length === 1 ? '' : 's'} match` +
+    (rows.length > shown.length ? ` — showing the ${shown.length} easiest; search or filter to narrow it down` : '') + '</div>';
+
+  $('bank-list').innerHTML = (rows.length ? head : '') + (shown.map((x) => {
     const s = p.byQuestion[x.id];
     const st = !s ? '<span class="st un">unseen</span>'
       : s.solved ? '<span class="st ok">solved</span>' : '<span class="st no">unsolved</span>';
@@ -422,11 +442,11 @@ function renderBank() {
       <span>${esc(x.title)} <span class="muted small">· ${esc(x.topic)}</span></span>
       ${st}<span class="muted small">Lv ${levelStr(s && s.rating ? s.rating : x.rating)}</span>
     </div>`;
-  }).join('') || '<div class="muted">Nothing matches.</div>';
+  }).join('') || '<div class="muted">Nothing matches.</div>');
 
   $('bank-list').querySelectorAll('.brow').forEach((el) => {
     el.onclick = () => {
-      nextQuestion(BANK.find((x) => x.id === el.dataset.id));
+      nextQuestion(el.dataset.id);
       document.querySelector('.tab[data-view="practice"]').click();
     };
   });

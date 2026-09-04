@@ -1,14 +1,14 @@
 /* Fine-grained difficulty engine.
 
    Every question carries an Elo-style rating (roughly 700 = absolute
-   beginner, 2200 = hard interview question). The player carries the same
+   beginner, 2600 = hard interview question). The player carries the same
    kind of number, and it moves in small steps after every attempt, so
    progress is measured continuously instead of in three coarse buckets.
    Displayed as a level: rating / 100, to two decimals (Lv 12.43).          */
 
 export const START_RATING = 1000;
 export const MIN_RATING = 600;
-export const MAX_RATING = 2400;
+export const MAX_RATING = 2700;
 
 export const toLevel = (r) => (r / 100);
 export const levelStr = (r) => toLevel(r).toFixed(2);
@@ -67,7 +67,7 @@ export function updatePlayer(playerRating, question, attempt, totalAttempts) {
 export function updateQuestion(qRating, playerRating, score) {
   const e = expected(qRating, playerRating);
   const d = 6 * ((1 - score) - e);
-  return clamp(round2(qRating + d), 500, 2600);
+  return clamp(round2(qRating + d), 500, MAX_RATING);
 }
 
 /**

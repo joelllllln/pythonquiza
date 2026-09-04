@@ -38,14 +38,25 @@ def _eq(got, exp, cmp):
         except Exception:
             return False
     if cmp == 'approx':
+        # Compare structures element by element so a float buried in a list
+        # or a dict is still allowed its rounding wobble.
+        if isinstance(exp, dict):
+            try:
+                if set(got) != set(exp):
+                    return False
+                return all(_eq(got[k], exp[k], 'approx') for k in exp)
+            except Exception:
+                return False
         if isinstance(exp, (list, tuple)):
             try:
                 if len(got) != len(exp):
                     return False
-                return all(_close(g, e) for g, e in zip(got, exp))
+                return all(_eq(g, e, 'approx') for g, e in zip(got, exp))
             except Exception:
                 return False
-        return _close(got, exp)
+        if isinstance(exp, (int, float)) and isinstance(got, (int, float)):
+            return _close(got, exp)
+        return got == exp
     if cmp == 'text':
         return _norm(got) == _norm(exp)
     if isinstance(exp, float) or isinstance(got, float):
@@ -64,6 +75,13 @@ class _Cap(io.StringIO):
         if self.tell() > self.limit:
             raise RuntimeError('too much output (possible infinite loop)')
         return super().write(s)
+
+def _exec_setup(setup, ns):
+    """Run the question's own preamble (TreeNode, ListNode, builders …)
+    before the player's code, in the same namespace."""
+    if setup:
+        exec(compile(setup, 'setup.py', 'exec'), ns)
+
 
 def _exec_user(code, ns, feed):
     """Run the user's module-level code, capturing stdout."""
@@ -100,6 +118,7 @@ def run(code, spec):
         first = True
         for i, t in enumerate(cases):
             ns = {'__name__': '__main__'}
+            _exec_setup(spec.get('setup'), ns)
             printed, err = _exec_user(code, ns, t.get('stdin', []))
             if first:
                 out['stdout'] = _short(printed, 4000)
@@ -121,6 +140,7 @@ def run(code, spec):
     # ---- function mode ----
     fname = spec['fn']
     ns = {'__name__': '__main__'}
+    _exec_setup(spec.get('setup'), ns)
     printed, err = _exec_user(code, ns, [])
     out['stdout'] = _short(printed, 4000)
     if err:
@@ -131,18 +151,33 @@ def run(code, spec):
         out['error'] = "Define a function called '%s'." % fname
         return out
 
+    wrap = spec.get('wrap')
+
     for t in spec.get('tests', []):
-        args = copy.deepcopy(t.get('args', []))
-        kwargs = copy.deepcopy(t.get('kwargs', {}))
         cmp = t.get('cmp') or spec.get('cmp') or ''
-        call = '%s(%s)' % (fname, ', '.join(
-            [_fmt(a) for a in t.get('args', [])] +
-            ['%s=%s' % (k, _fmt(v)) for k, v in t.get('kwargs', {}).items()]))
+        # args_py builds arguments with the question's own helpers — the way
+        # a tree or a linked list gets into the call.
+        if t.get('args_py'):
+            call = '%s(%s)' % (fname, ', '.join(t['args_py']))
+        else:
+            call = '%s(%s)' % (fname, ', '.join(
+                [_fmt(a) for a in t.get('args', [])] +
+                ['%s=%s' % (k, _fmt(v)) for k, v in t.get('kwargs', {}).items()]))
         buf = _Cap()
         old = sys.stdout
         sys.stdout = buf
         try:
+            if t.get('args_py'):
+                args = [eval(src, ns) for src in t['args_py']]
+                kwargs = {}
+            else:
+                args = copy.deepcopy(t.get('args', []))
+                kwargs = copy.deepcopy(t.get('kwargs', {}))
             got = fn(*args, **kwargs)
+            if wrap:
+                scope = dict(ns)
+                scope['_r'] = got
+                got = eval(wrap, scope)
             ok = _eq(got, t['expect'], cmp)
             row = {'name': _short(call, 160), 'pass': bool(ok),
                    'expected': _short(_fmt(t['expect'])), 'got': _short(_fmt(got)),

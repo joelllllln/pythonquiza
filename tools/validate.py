@@ -1,26 +1,59 @@
 #!/usr/bin/env python3
-"""Check every question in the bank.
+"""Check the whole question bank.
 
-Runs each reference solution through the exact grading harness the browser
-uses (lifted straight out of js/py-worker.js) and reports anything that does
-not pass its own tests, plus schema problems and duplicate ids.
+Expands every question — hand-written and generated — and runs each
+reference solution through the exact grading harness the browser uses
+(lifted straight out of js/py-worker.js). Reports anything that does not
+pass its own tests, plus schema problems and duplicate ids.
 
-    python3 tools/validate.py
+    python3 tools/validate.py            # everything
+    python3 tools/validate.py --stride 5 # every 5th generated variant
 """
+import argparse
 import json
 import os
 import re
 import subprocess
 import sys
+from collections import Counter
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+NDJSON = os.path.join(ROOT, 'tools', 'bank.ndjson')
 
 
-def load_questions():
-    out = subprocess.run(
-        ['node', os.path.join(ROOT, 'tools', 'dump_questions.js')],
-        capture_output=True, text=True, check=True)
-    return json.loads(out.stdout)
+def check_js_syntax():
+    """Every shipped .js file must actually parse — the browser will not
+    tell you nearly as clearly as node does."""
+    bad = []
+    for name in sorted(os.listdir(os.path.join(ROOT, 'js'))):
+        if not name.endswith('.js'):
+            continue
+        path = os.path.join(ROOT, 'js', name)
+        # ES modules use import/export, which `node --check` rejects in CJS mode.
+        src = open(path, encoding='utf-8').read()
+        args = ['node', '--input-type=module', '--check'] if ('import ' in src or 'export ' in src) \
+            else ['node', '--check', path]
+        if args[1] == '--input-type=module':
+            proc = subprocess.run(args, input=src, capture_output=True, text=True)
+        else:
+            proc = subprocess.run(args, capture_output=True, text=True)
+        if proc.returncode:
+            bad.append((name, proc.stderr.strip().splitlines()[:3]))
+    return bad
+
+
+def dump_bank(stride):
+    subprocess.run(
+        ['node', os.path.join(ROOT, 'tools', 'dump_questions.js'), NDJSON, str(stride)],
+        check=True)
+
+
+def iter_bank():
+    with open(NDJSON, encoding='utf-8') as fh:
+        for line in fh:
+            line = line.strip()
+            if line:
+                yield json.loads(line)
 
 
 def load_harness():
@@ -34,9 +67,16 @@ def load_harness():
 
 
 def spec_for(q):
+    spec = {'mode': q.get('mode', 'func')}
+    if q.get('setup'):
+        spec['setup'] = q['setup']
     if q.get('mode') == 'stdout':
-        return {'mode': 'stdout', 'tests': q['tests']}
-    return {'mode': 'func', 'fn': q['fn'], 'tests': q['tests'], 'cmp': q.get('cmp', '')}
+        spec['tests'] = q['tests']
+        return spec
+    spec.update({'fn': q['fn'], 'tests': q['tests'], 'cmp': q.get('cmp', '')})
+    if q.get('wrap'):
+        spec['wrap'] = q['wrap']
+    return spec
 
 
 def check_schema(q):
@@ -46,55 +86,98 @@ def check_schema(q):
             problems.append('missing ' + field)
     if q.get('mode') != 'stdout' and not q.get('fn'):
         problems.append('missing fn')
-    if not isinstance(q.get('rating'), (int, float)) or not 500 <= q['rating'] <= 2600:
-        problems.append('rating out of range')
+    if not isinstance(q.get('rating'), (int, float)) or not 500 <= q.get('rating', 0) <= 2700:
+        problems.append('rating out of range: %s' % q.get('rating'))
     if len(q.get('tests') or []) < 1:
         problems.append('no tests')
     if q.get('mode') != 'stdout':
         for t in q.get('tests') or []:
             if 'expect' not in t:
                 problems.append('test without expect')
+    if q.get('mode') != 'stdout' and q.get('fn') and \
+            ('def %s' % q['fn']) not in q['solution'] and 'class ' not in q['solution']:
+        problems.append("solution does not define %s" % q['fn'])
     return problems
 
 
 def main():
-    questions = load_questions()
-    harness = load_harness()
-    entry = harness['_entry']
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--stride', type=int, default=1,
+                    help='check every Nth generated variant (1 = all)')
+    ap.add_argument('--only', default='', help='only ids containing this string')
+    ap.add_argument('--max-report', type=int, default=40)
+    args = ap.parse_args()
 
-    failures = 0
+    js_problems = check_js_syntax()
+    for name, detail in js_problems:
+        print(f'JS SYNTAX  js/{name}')
+        for line in detail:
+            print('    ' + line)
+
+    dump_bank(args.stride)
+    entry = load_harness()['_entry']
+
+    failures = len(js_problems)
+    reported = 0
+    total = 0
     seen = set()
-    for q in questions:
+    ratings = []
+    topics = Counter()
+    templates = set()
+    broken_templates = Counter()
+
+    def report(msg, template):
+        nonlocal reported
+        broken_templates[template] += 1
+        if reported < args.max_report:
+            print(msg)
+            reported += 1
+        elif reported == args.max_report:
+            print('… further problems suppressed (see the summary)')
+            reported += 1
+
+    for q in iter_bank():
+        if args.only and args.only not in q['id']:
+            continue
+        total += 1
         label = q.get('id', '<no id>')
+        tmpl = q.get('template', label)
+        if q.get('template'):
+            templates.add(q['template'])
         if label in seen:
-            print(f'DUPLICATE ID: {label}')
             failures += 1
+            report(f'DUPLICATE ID: {label}', tmpl)
         seen.add(label)
+        ratings.append(q.get('rating', 0))
+        topics[q.get('topic', '?')] += 1
 
         for p in check_schema(q):
-            print(f'SCHEMA  {label}: {p}')
             failures += 1
+            report(f'SCHEMA  {label}: {p}', tmpl)
 
         payload = json.loads(entry(q['solution'], json.dumps(spec_for(q))))
         if payload.get('error'):
-            print(f'ERROR   {label}: {payload["error"].strip().splitlines()[-1]}')
             failures += 1
+            report(f'ERROR   {label}: {payload["error"].strip().splitlines()[-1]}', tmpl)
             continue
         bad = [r for r in payload['results'] if not r['pass']]
         if bad:
             failures += 1
-            print(f'FAIL    {label}: {len(bad)}/{len(payload["results"])} tests fail')
-            for r in bad[:3]:
-                print(f'          {r["name"]}  expected {r["expected"]}  got {r["got"]}')
-                if r.get('error'):
-                    print('          ' + r['error'].strip().splitlines()[-1])
+            report(f'FAIL    {label}: {len(bad)}/{len(payload["results"])} tests fail', tmpl)
+            for rr in bad[:2]:
+                report(f'          {rr["name"]}  expected {rr["expected"]}  got {rr["got"]}', tmpl)
+                if rr.get('error'):
+                    report('          ' + rr['error'].strip().splitlines()[-1], tmpl)
 
-    ratings = sorted(q['rating'] for q in questions)
+    ratings.sort()
     print()
-    print(f'{len(questions)} questions, ratings {ratings[0]}–{ratings[-1]}, '
-          f'{len(set(q["topic"] for q in questions))} topics')
+    print(f'{total} questions checked ({len(templates)} templates), '
+          f'ratings {ratings[0]}–{ratings[-1]}, {len(topics)} topics')
+    print('  topics: ' + ', '.join(f'{t}:{n}' for t, n in topics.most_common()))
     if failures:
-        print(f'{failures} problem(s)')
+        print(f'\n{failures} problem(s) across {len(broken_templates)} source(s):')
+        for name, n in broken_templates.most_common(20):
+            print(f'  {name}: {n}')
         return 1
     print('all reference solutions pass their own tests')
     return 0
