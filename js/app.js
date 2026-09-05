@@ -60,6 +60,114 @@ function toggleTheme() {
   if (editor) editor.refresh();
 }
 
+/* ---------------- panel layout (desktop) ---------------- */
+
+const LAYOUT_KEY = 'pyquiz.layout';
+const SPLIT_KEY = 'pyquiz.split.';
+
+/** 'rows' = question above the editor (the default), 'cols' = side by side. */
+function storedLayout() {
+  try { return localStorage.getItem(LAYOUT_KEY) === 'cols' ? 'cols' : 'rows'; }
+  catch { return 'rows'; }
+}
+
+/** null until you drag the divider, so the stylesheet's own default wins. */
+function storedSplit(mode) {
+  let n = NaN;
+  try { n = parseFloat(localStorage.getItem(SPLIT_KEY + mode)); } catch {}
+  return Number.isFinite(n) ? clampSplit(n) : null;
+}
+
+function clampSplit(pct) {
+  return Math.min(78, Math.max(18, pct));
+}
+
+/** Where the divider sits right now, as a percentage of the pane. */
+function currentSplit() {
+  const view = $('view-practice');
+  const stored = storedSplit(view.dataset.layout);
+  if (stored !== null) return stored;
+  const box = view.getBoundingClientRect();
+  const ask = $('view-practice').querySelector('.ask').getBoundingClientRect();
+  return view.dataset.layout === 'cols'
+    ? (ask.width / box.width) * 100
+    : (ask.height / box.height) * 100;
+}
+
+function applyLayout() {
+  const mode = storedLayout();
+  const view = $('view-practice');
+  view.dataset.layout = mode;
+  const split = storedSplit(mode);
+  if (split === null) view.style.removeProperty('--split');
+  else view.style.setProperty('--split', split + '%');
+  const btn = document.getElementById('layout-btn');
+  if (btn) btn.textContent = mode === 'cols' ? 'Question on top' : 'Side by side';
+}
+
+function toggleLayout() {
+  try { localStorage.setItem(LAYOUT_KEY, storedLayout() === 'cols' ? 'rows' : 'cols'); } catch {}
+  applyLayout();
+  closeSheets();
+  if (editor) editor.refresh();
+}
+
+/** Drag the divider; double-click puts it back where it started. */
+function wireGrip() {
+  const grip = $('grip');
+  const view = $('view-practice');
+  let dragging = false;
+
+  const fraction = (e) => {
+    const box = view.getBoundingClientRect();
+    return view.dataset.layout === 'cols'
+      ? ((e.clientX - box.left) / box.width) * 100
+      : ((e.clientY - box.top) / box.height) * 100;
+  };
+
+  grip.addEventListener('pointerdown', (e) => {
+    dragging = true;
+    grip.classList.add('dragging');
+    grip.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+
+  grip.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    view.style.setProperty('--split', clampSplit(fraction(e)) + '%');
+  });
+
+  const stop = (e) => {
+    if (!dragging) return;
+    dragging = false;
+    grip.classList.remove('dragging');
+    const pct = clampSplit(fraction(e));
+    try { localStorage.setItem(SPLIT_KEY + view.dataset.layout, String(Math.round(pct))); } catch {}
+    if (editor) editor.refresh();
+  };
+  grip.addEventListener('pointerup', stop);
+  grip.addEventListener('pointercancel', stop);
+
+  grip.addEventListener('dblclick', () => {
+    try { localStorage.removeItem(SPLIT_KEY + view.dataset.layout); } catch {}
+    applyLayout();
+    if (editor) editor.refresh();
+  });
+
+  // Keyboard nudge, so the divider is not mouse-only.
+  grip.addEventListener('keydown', (e) => {
+    const cols = view.dataset.layout === 'cols';
+    const less = cols ? 'ArrowLeft' : 'ArrowUp';
+    const more = cols ? 'ArrowRight' : 'ArrowDown';
+    if (e.key !== less && e.key !== more) return;
+    e.preventDefault();
+    const pct = clampSplit(currentSplit() + (e.key === more ? 3 : -3));
+    view.style.setProperty('--split', pct + '%');
+    try { localStorage.setItem(SPLIT_KEY + view.dataset.layout, String(Math.round(pct))); } catch {}
+    if (editor) editor.refresh();
+  });
+}
+
 /* ---------------- boot ---------------- */
 
 /** Phones get a different editor: it grows with the code and the page
@@ -100,6 +208,8 @@ function boot() {
   applyTheme();
   window.matchMedia('(prefers-color-scheme: light)')
     .addEventListener('change', applyTheme);
+  applyLayout();
+  wireGrip();
 
   wireUI();
   store.init().then(() => { render(); showBanner(); });
@@ -173,6 +283,7 @@ function wireUI() {
   $('cal-skip').onclick = () => setLevel(START_RATING);
   $('recalibrate').onclick = () => { closeSheets(); show('practice'); askLevel(); };
   $('theme-btn').onclick = toggleTheme;
+  $('layout-btn').onclick = toggleLayout;
 
   $('signin').onclick = async () => {
     closeSheets();

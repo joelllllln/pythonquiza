@@ -86,16 +86,33 @@ h1,h2{margin:0;font-weight:600;letter-spacing:-0.015em}
 .code{display:flex;flex-direction:column;gap:10px}
 #editor-wrap{height:auto;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
 
+/* The divider only exists where there is room to drag it. */
+.grip{display:none;position:relative;background:none;border:0;padding:0;touch-action:none}
+.grip::after{content:'';position:absolute;background:var(--line);transition:background .12s}
+.grip:hover::after,.grip:focus-visible::after,.grip.dragging::after{background:var(--accent)}
+.grip:focus-visible{outline:none}
+#layout-btn{display:none}
+
+/* Room for two panes: question above the editor by default, side by side if
+   you prefer, and the split is yours to drag. */
 @media(min-width:960px){
-  .practice{
-    display:grid;grid-template-columns:minmax(320px,36%) 1fr;
-    gap:28px;padding:2px 22px 18px;overflow:hidden;
-  }
-  .ask{display:flex;flex-direction:column;min-height:0}
+  .practice{display:grid;gap:0;padding:2px 22px 16px;overflow:hidden}
+  /* Until you drag it, the question takes only the room it needs — capped so a
+     long one can never crowd out the editor. */
+  .practice[data-layout="rows"]{grid-template-rows:var(--split,max-content) 16px minmax(0,1fr);grid-template-columns:1fr}
+  .practice[data-layout="rows"] .ask{max-height:40vh}
+  .practice[data-layout="cols"]{grid-template-columns:var(--split,36%) 26px 1fr;grid-template-rows:1fr}
+  .ask{display:flex;flex-direction:column;min-height:0;min-width:0}
   .ask-scroll{flex:1;min-height:0;overflow:auto;padding-right:10px}
-  .code{min-height:0;overflow:hidden}
-  #editor-wrap{flex:1 1 auto;min-height:120px}
+  .code{min-height:0;min-width:0;overflow:hidden}
+  #editor-wrap{flex:1 1 auto;min-height:80px}
   .console{max-height:38%;overflow:auto}
+  .grip{display:block}
+  #layout-btn{display:block}
+  .practice[data-layout="rows"] .grip{cursor:row-resize}
+  .practice[data-layout="rows"] .grip::after{left:0;right:0;top:7px;height:1px}
+  .practice[data-layout="cols"] .grip{cursor:col-resize}
+  .practice[data-layout="cols"] .grip::after{top:0;bottom:0;left:12px;width:1px}
 }
 
 /* ---------- the question ---------- */
