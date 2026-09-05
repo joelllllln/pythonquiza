@@ -54,12 +54,13 @@ difficulty ladder dense enough to climb one small step at a time.
 
 Every one of the 10,239 is checked by `tools/validate.py` before it ships.
 
-## Playing without setup
+## Sign-in and sync
 
-It works immediately. Progress is stored in that browser's `localStorage`.
-No account, no sync.
+This deployment is wired to a Firebase project, so **Sign in** gives you
+Google sign-in and your progress follows you to any device. Without signing
+in it still works — progress just stays in that one browser.
 
-## Turning on Google sign-in and cross-device sync (~5 minutes)
+To point a fork at your own Firebase project instead:
 
 1. Go to https://console.firebase.google.com and **Add project** (free Spark
    plan is plenty).
@@ -76,7 +77,8 @@ No account, no sync.
 
 Commit and push, and the sign-in button starts working. The API key in
 `config.js` is public by design — Firebase keys identify the project, they do
-not grant access; the security rules do that.
+not grant access; the security rules do that. (A service-account JSON is a
+different thing entirely and must never go in a repository.)
 
 ## Hosting
 

@@ -8,10 +8,10 @@
    security rules in firestore.rules, not by hiding the key.                */
 
 export const firebaseConfig = {
-  apiKey: '',
-  authDomain: '',
-  projectId: '',
-  appId: '',
+  apiKey: 'AIzaSyAwq3Q4jXs2yISgI_CGYqLewuCsUBMs1fQ',
+  authDomain: 'pyquiz-5870c.firebaseapp.com',
+  projectId: 'pyquiz-5870c',
+  appId: '1:534771282596:web:fad27962282363161fac31',
 };
 
 export const firebaseEnabled = Boolean(
