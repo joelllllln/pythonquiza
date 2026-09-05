@@ -20,6 +20,7 @@
   --pass:#8CBF6B;       /* moss */
   --fail:#D9614C;       /* terracotta */
   --r:4px;
+  --col:1060px;         /* the centred column everything lives in */
   --sans:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
   --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
 }
@@ -96,7 +97,10 @@ h1,h2{margin:0;font-weight:600;letter-spacing:-0.015em}
 /* Room for two panes: question above the editor by default, side by side if
    you prefer, and the split is yours to drag. */
 @media(min-width:960px){
-  .practice{display:grid;gap:0;padding:2px 22px 16px;overflow:hidden}
+  /* One centred column, so nothing drifts to the edges of a wide monitor. */
+  .bar{width:100%;max-width:var(--col);margin:0 auto;padding:10px 22px 6px}
+  .practice{display:grid;gap:0;padding:2px 22px 16px;overflow:hidden;
+            width:100%;max-width:var(--col);margin:0 auto}
   /* Until you drag it, the question takes only the room it needs — capped so a
      long one can never crowd out the editor. */
   .practice[data-layout="rows"]{grid-template-rows:var(--split,max-content) 16px minmax(0,1fr);grid-template-columns:1fr}
