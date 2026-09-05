@@ -48,11 +48,9 @@ function boot() {
     // caret and dragging a selection on iOS.
     inputStyle: touch ? 'contenteditable' : 'textarea',
     viewportMargin: touch ? Infinity : 20,
-    extraKeys: {
-      'Ctrl-Enter': () => doSubmit(),
-      'Cmd-Enter': () => doSubmit(),
-      Tab: (cm) => cm.replaceSelection('    '),
-    },
+    // Ctrl/Cmd+Enter is handled on the document instead, so it still works
+    // once focus has moved to the Next button.
+    extraKeys: { Tab: (cm) => cm.replaceSelection('    ') },
   });
   // iOS autocorrect fights with code: it capitalises keywords and swaps
   // quotes for smart ones.
@@ -164,6 +162,15 @@ function wireUI() {
     document.querySelector('.tab[data-view="practice"]').click();
   };
 
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter'
+        && !document.getElementById('view-practice').classList.contains('hidden')
+        && $('calibrate').classList.contains('hidden')) {
+      e.preventDefault();
+      submitOrNext();
+    }
+  });
+
   $('bank-search').oninput = renderBank;
   $('bank-topic').onchange = renderBank;
   $('bank-state').onchange = renderBank;
@@ -270,6 +277,7 @@ function nextQuestion(forcedId) {
   $('q-topic').textContent = q.topic;
   $('q-diff').textContent = 'Lv ' + levelStr(shownRating);
   $('q-body').innerHTML = md(q.prompt);
+  $('q-tests').innerHTML = renderTests(q);
   $('hint-box').innerHTML = '';
   $('hint-box').classList.add('hidden');
   $('hint-btn').disabled = !(q.hints && q.hints.length);
@@ -285,8 +293,42 @@ function nextQuestion(forcedId) {
   editor.refresh();
   updateTargetLabel();
   startTimer();
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  if (!touch) editor.focus();
+  document.getElementById('view-practice').scrollTop = 0;
 }
+
+/** The checks your answer will be run against — no surprises at submit time. */
+function renderTests(question) {
+  const all = question.tests || [];
+  if (!all.length) return '';
+  const head = '<div class="tests-head">Checked against</div>';
+
+  // A program's expected output is usually several lines, so give it room
+  // rather than truncating it to something meaningless.
+  if (question.mode === 'stdout') {
+    const rows = all.slice(0, 3).map((t) => {
+      const input = (t.stdin || []).join(' ⏎ ');
+      return `<div class="ttest">
+        <div class="dim">${input ? 'input: ' + esc(clip(input, 60)) : 'no input'}</div>
+        <pre>${esc(clip(t.expect, 240))}</pre>
+      </div>`;
+    }).join('');
+    return head + rows + more(all.length - Math.min(3, all.length));
+  }
+
+  const rows = all.slice(0, 6).map((t) => {
+    const call = t.args_py
+      ? `${question.fn}(${t.args_py.join(', ')})`
+      : `${question.fn}(${(t.args || []).map(window.py).join(', ')})`;
+    return `<div class="trow-test"><span>${esc(clip(call, 80))}</span>` +
+           `<span class="dim">→ ${esc(clip(window.py(t.expect), 60))}</span></div>`;
+  }).join('');
+  return head + rows + more(all.length - Math.min(6, all.length));
+}
+
+const more = (n) => (n > 0 ? `<div class="dim tiny">and ${n} more</div>` : '');
+
+const clip = (s, n) => (String(s).length > n ? String(s).slice(0, n - 1) + '…' : String(s));
 
 /** Keep a short memory of what has been on screen, so it does not recur. */
 function rememberShown(question) {
@@ -329,20 +371,44 @@ function showSolution() {
   $('next-row').classList.remove('hidden');
 }
 
+/**
+ * Run, without grading. For a program question that means running it on the
+ * first example's input. For a function question it means actually calling
+ * your function on the first example — running the file alone would just
+ * define the function and print nothing, which is what it used to do.
+ */
 async function doRun() {
   if (!(await ensurePy())) return;
   busy(true, 'running…');
-  const spec = q.mode === 'stdout'
-    ? { mode: 'plain', stdin: (q.tests[0] && q.tests[0].stdin) || [], setup: q.setup }
-    : { mode: 'plain', stdin: [], setup: q.setup };
-  const r = await runner.run(editor.getValue(), spec);
-  busy(false);
+  const first = (q.tests || [])[0];
   const out = $('output');
-  out.classList.toggle('err', Boolean(r.error));
-  out.textContent = (r.error ? r.error : (r.stdout || '(no output)'));
-  if (!r.error && q.mode === 'stdout' && q.tests[0] && q.tests[0].stdin) {
-    $('run-status').textContent = 'ran with the first test input';
+
+  if (q.mode === 'stdout' || !first) {
+    const r = await runner.run(editor.getValue(),
+      { mode: 'plain', stdin: (first && first.stdin) || [], setup: q.setup });
+    busy(false);
+    out.classList.toggle('err', Boolean(r.error));
+    out.textContent = r.error || r.stdout || '(no output)';
+    $('run-status').textContent = r.error ? '' : 'first example’s input · not graded';
+    return;
   }
+
+  const r = await runner.run(editor.getValue(),
+    { mode: 'func', fn: q.fn, tests: [first], cmp: q.cmp || '', setup: q.setup, wrap: q.wrap });
+  busy(false);
+  const row = r.results && r.results[0];
+  out.classList.toggle('err', Boolean(r.error || (row && row.error)));
+  if (r.error) out.textContent = r.error;
+  else if (!row) out.textContent = r.stdout || '(no output)';
+  else if (row.error) out.textContent = row.error;
+  else out.textContent = (r.stdout ? r.stdout.replace(/\n?$/, '\n') : '') +
+    `${row.name}\n→ ${row.got}` + (row.pass ? '' : `\n  expected ${row.expected}`);
+  $('run-status').textContent = 'one example · not graded';
+}
+
+function submitOrNext() {
+  if (session && session.solved) nextQuestion();
+  else doSubmit();
 }
 
 async function doSubmit() {
@@ -370,8 +436,15 @@ async function doSubmit() {
   renderCases(r.results, passed, allPass);
 
   if (allPass) {
-    endSession(true);
+    session.solved = true;
+    const moved = endSession(true);
+    if (moved) {
+      const sign = moved.delta >= 0 ? '+' : '';
+      const v = $('results').querySelector('.verdict');
+      if (v) v.textContent += `  ·  ${sign}${(moved.delta / 100).toFixed(2)} → Lv ${levelStr(moved.rating)}`;
+    }
     $('next-row').classList.remove('hidden');
+    $('next').focus();
   } else {
     session.failedSubmits++;
   }
@@ -430,6 +503,7 @@ function endSession(solved) {
 
   store.save();
   flashDelta(delta);
+  return { rating, delta };
 }
 
 function flashDelta(delta) {
