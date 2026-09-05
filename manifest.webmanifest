@@ -1,11 +1,11 @@
 {
-  "name": "PyQuiz — Python practice",
+  "name": "PyQuiz \u2014 Python practice",
   "short_name": "PyQuiz",
   "start_url": ".",
   "scope": ".",
   "display": "standalone",
-  "background_color": "#0d1117",
-  "theme_color": "#0d1117",
+  "background_color": "#12110E",
+  "theme_color": "#12110E",
   "description": "Adaptive Python coding practice with an in-browser Python runtime.",
   "icons": [
     {
