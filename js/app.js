@@ -92,29 +92,27 @@ function setLevel(rating) {
 }
 
 function wireUI() {
-  document.querySelectorAll('.tab').forEach((b) => {
-    b.onclick = () => {
-      document.querySelectorAll('.tab').forEach((x) => x.classList.toggle('on', x === b));
-      for (const v of ['practice', 'stats', 'bank']) {
-        $('view-' + v).classList.toggle('hidden', v !== b.dataset.view);
-      }
-      if (b.dataset.view === 'stats') renderStats();
-      if (b.dataset.view === 'bank') renderBank();
-      // CodeMirror does not lay out while it is hidden, so it comes back
-      // showing whatever it last painted. Nudge it once it is visible.
-      if (b.dataset.view === 'practice') editor.refresh();
-    };
+  document.querySelectorAll('[data-view]').forEach((b) => {
+    b.onclick = () => show(b.dataset.view);
+  });
+
+  // Two sheets hold everything that is not the question: the menu and the
+  // difficulty control. Tap outside to dismiss.
+  $('menu-btn').onclick = () => openSheet('sheet-menu');
+  $('level-chip').onclick = () => { paintSliderLabel(); openSheet('sheet-level'); };
+  document.querySelectorAll('.sheet').forEach((sheet) => {
+    sheet.onclick = (e) => { if (e.target === sheet && sheet.id !== 'calibrate') closeSheets(); };
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeSheets();
   });
 
   $('run').onclick = doRun;
   $('submit').onclick = doSubmit;
-  $('skip').onclick = () => { endSession(false); nextQuestion(); };
+  $('skip').onclick = () => { closeSheets(); endSession(false); nextQuestion(); };
   $('next').onclick = () => { nextQuestion(); };
-  $('reset-code').onclick = () => { editor.setValue(q.starter || ''); editor.focus(); };
-  $('show-sol').onclick = showSolution;
-  $('hint-btn').onclick = showHint;
-  $('big-hint').onclick = showBigHint;
-  $('reveal').onclick = revealAnswer;
+  $('reset-code').onclick = () => { closeSheets(); editor.setValue(q.starter || ''); editor.focus(); };
+  $('hint-btn').onclick = nextHelp;
 
   // The slider is only useful if it does something now: dragging it re-picks
   // the question straight away, unless you have already solved this one.
@@ -122,29 +120,26 @@ function wireUI() {
   $('diff-slider').onchange = () => {
     store.progress.offset = Number($('diff-slider').value || 0);
     store.save();
-    if (!session || !session.done) {
-      nextQuestion();
-      toast(`Aiming at Lv ${levelStr(target())}`);
-    }
+    if (!session || !session.done) nextQuestion();
+    // Get out of the way so the new question is visible.
+    closeSheets();
   };
 
-  $('too-easy').onclick = () => rateDifficulty(false);
-  $('too-hard').onclick = () => rateDifficulty(true);
+  $('too-easy').onclick = () => { closeSheets(); rateDifficulty(false); };
+  $('too-hard').onclick = () => { closeSheets(); rateDifficulty(true); };
 
   document.querySelectorAll('.lvl').forEach((b) => {
     b.onclick = () => setLevel(Number(b.dataset.rating));
   });
   $('cal-skip').onclick = () => setLevel(START_RATING);
-  $('recalibrate').onclick = () => {
-    $('calibrate').classList.remove('hidden');
-    document.querySelector('.tab[data-view="practice"]').click();
-  };
+  $('recalibrate').onclick = () => { closeSheets(); show('practice'); askLevel(); };
 
   $('signin').onclick = async () => {
+    closeSheets();
     try { await store.signIn(); }
     catch (e) { alert('Sign-in failed: ' + (e.message || e)); }
   };
-  $('signout').onclick = () => store.signOut();
+  $('signout').onclick = () => { closeSheets(); store.signOut(); };
 
   $('export').onclick = () => {
     const blob = new Blob([JSON.stringify(store.progress, null, 2)], { type: 'application/json' });
@@ -160,8 +155,8 @@ function wireUI() {
     paintSliderLabel();
     renderStats();
     render();
+    show('practice');
     askLevel();
-    document.querySelector('.tab[data-view="practice"]').click();
   };
 
   document.addEventListener('keydown', (e) => {
@@ -178,33 +173,44 @@ function wireUI() {
   $('bank-state').onchange = renderBank;
 }
 
-function onRunnerStatus(kind, msg) {
-  const out = $('output');
-  const showingError = out.classList.contains('err');
-  if (kind === 'ready') {
-    pyReady = true;
-    if (showingError) $('run-status').textContent = 'Python restarted';
-    else { out.textContent = 'Python ready. Write your code and hit Run.'; $('run-status').textContent = ''; }
-  } else if (kind === 'loading') {
-    pyReady = false;
-    if (!showingError) out.textContent = msg || 'Loading Python…';
-  } else if (kind === 'restarting') {
-    pyReady = false;
-  } else if (kind === 'fatal') {
-    pyReady = false;
-    $('output').textContent = 'Could not start Python: ' + msg;
-    $('output').classList.add('err');
+/** Switch the whole screen. Only one view exists at a time. */
+function show(view) {
+  closeSheets();
+  for (const v of ['practice', 'stats', 'bank']) {
+    $('view-' + v).classList.toggle('hidden', v !== view);
   }
+  if (view === 'stats') renderStats();
+  if (view === 'bank') renderBank();
+  // CodeMirror does not lay out while hidden; nudge it once it is back.
+  if (view === 'practice') editor.refresh();
 }
 
-function showBanner() {
-  const b = $('banner');
-  if (!firebaseEnabled) {
-    b.className = 'banner';
-    b.innerHTML = 'Progress is saved in this browser only. Add a Firebase project in <code>js/config.js</code> to sign in with Google and sync every device — see the README.';
-    b.classList.remove('hidden');
-  }
+function openSheet(id) {
+  closeSheets();
+  $(id).classList.remove('hidden');
 }
+
+function closeSheets() {
+  document.querySelectorAll('.sheet').forEach((sheet) => {
+    if (sheet.id !== 'calibrate') sheet.classList.add('hidden');
+  });
+}
+
+function onRunnerStatus(kind) {
+  if (kind === 'ready') pyReady = true;
+  else if (kind === 'loading' || kind === 'restarting') pyReady = false;
+  else if (kind === 'fatal') { pyReady = false; say('Python could not start. Reload the page.', true); }
+}
+
+/** The output box only exists when there is something to say. */
+function say(text, isError) {
+  const out = $('output');
+  out.textContent = text || '';
+  out.classList.toggle('err', Boolean(isError));
+  out.classList.toggle('hidden', !text);
+}
+
+function showBanner() { /* nothing to announce: sign-in lives in the menu */ }
 
 /* ---------------- question flow ---------------- */
 
@@ -212,16 +218,12 @@ function target() {
   return store.progress.rating + Number($('diff-slider').value || 0);
 }
 
+/** The sheet shows one number: the level you are aiming at. */
 function paintSliderLabel() {
-  const v = Number($('diff-slider').value || 0);
-  $('diff-val').textContent = (v >= 0 ? '+' : '') + (v / 100).toFixed(1);
-  updateTargetLabel();
+  $('lvl-big').textContent = 'Lv ' + levelStr(target());
 }
 
-function updateTargetLabel() {
-  $('target-label').textContent =
-    `you: Lv ${levelStr(store.progress.rating)} · aiming at Lv ${levelStr(target())}`;
-}
+function updateTargetLabel() { paintSliderLabel(); }
 
 /** A short message that fades itself out. */
 let toastTimer = null;
@@ -273,25 +275,19 @@ function nextQuestion(forcedId) {
   session = { startedAt: Date.now(), failedSubmits: 0, hints: 0, shown: 0,
               bigHint: false, submitted: false, solved: false, done: false };
 
-  const st = store.progress.byQuestion[q.id];
-  const shownRating = st && st.rating ? st.rating : q.rating;
-
   $('q-title').textContent = q.title;
-  $('q-topic').textContent = q.topic;
-  $('q-diff').textContent = 'Lv ' + levelStr(shownRating);
   $('q-body').innerHTML = md(q.prompt);
   $('q-tests').innerHTML = renderTests(q);
+  $('examples').open = false;
+  $('examples').classList.toggle('hidden', !(q.tests || []).length);
   $('hint-box').innerHTML = '';
   $('hint-box').classList.add('hidden');
-  $('hint-btn').disabled = !(q.hints && q.hints.length);
   $('hint-btn').textContent = 'Hint';
-  $('big-hint').disabled = false;
-  $('big-hint').textContent = 'Big hint';
-  $('output').textContent = pyReady ? 'Ready.' : 'Loading Python…';
-  $('output').classList.remove('err');
+  $('hint-btn').disabled = false;
+  say('');
   $('results').innerHTML = '';
-  $('next-row').classList.add('hidden');
-  $('run-status').textContent = '';
+  $('next').classList.add('hidden');
+  $('submit').classList.remove('hidden');
 
   editor.setValue(store.draft(q.id) || q.starter || '');
   editor.clearHistory();
@@ -344,15 +340,8 @@ function rememberShown(question) {
   store.save();
 }
 
-function startTimer() {
-  clearInterval(tick);
-  const paint = () => {
-    const s = Math.floor((Date.now() - session.startedAt) / 1000);
-    $('q-timer').textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-  };
-  paint();
-  tick = setInterval(paint, 1000);
-}
+/** Time is recorded for the stats page; it is not shown while you work. */
+function startTimer() { clearInterval(tick); }
 
 function elapsed() { return Math.round((Date.now() - session.startedAt) / 1000); }
 
@@ -364,15 +353,25 @@ function addHint(html) {
   box.classList.remove('hidden');
 }
 
-/** A nudge. Costs a little rating; there are one to three per question. */
-function showHint() {
+/**
+ * One button, pressed as many times as you need: the question's own hints
+ * first, then most of the answer, then all of it. The label always says what
+ * the next press will give you.
+ */
+function nextHelp() {
   const hints = q.hints || [];
-  if (session.shown >= hints.length) return;
-  addHint(md(hints[session.shown]));
-  session.shown++;
-  session.hints++;
-  $('hint-btn').textContent = session.shown < hints.length ? `Hint ${session.shown + 1}` : 'No more hints';
-  $('hint-btn').disabled = session.shown >= hints.length;
+  if (session.shown < hints.length) {
+    addHint(md(hints[session.shown]));
+    session.shown++;
+    session.hints++;
+  } else if (!session.bigHint) {
+    showBigHint();
+  } else {
+    revealAnswer();
+    return;
+  }
+  $('hint-btn').textContent =
+    session.shown < hints.length ? 'Hint' : session.bigHint ? 'Answer' : 'More';
 }
 
 /**
@@ -405,8 +404,6 @@ function showBigHint() {
   addHint(`${esc(note)}<pre>${esc(text)}</pre>`);
   session.bigHint = true;
   session.hints += 2;
-  $('big-hint').disabled = true;
-  $('big-hint').textContent = 'Big hint shown';
 }
 
 /** The whole model answer, on demand. Counts the question as a miss. */
@@ -416,15 +413,17 @@ function revealAnswer() {
     endSession(false);
   }
   showSolution();
+  $('hint-btn').disabled = true;
   toast('Answer shown — counted as a miss');
   render();
 }
 
 function showSolution() {
   if (!session.done) endSession(false);
-  $('results').innerHTML =
-    `<div class="verdict fail">Model answer</div><pre class="out">${esc(q.solution)}</pre>`;
-  $('next-row').classList.remove('hidden');
+  addHint(`<pre>${esc(q.solution)}</pre>`);
+  $('submit').classList.add('hidden');
+  $('next').classList.remove('hidden');
+  $('next').focus();
 }
 
 /**
@@ -435,17 +434,14 @@ function showSolution() {
  */
 async function doRun() {
   if (!(await ensurePy())) return;
-  busy(true, 'running…');
+  busy(true);
   const first = (q.tests || [])[0];
-  const out = $('output');
 
   if (q.mode === 'stdout' || !first) {
     const r = await runner.run(editor.getValue(),
       { mode: 'plain', stdin: (first && first.stdin) || [], setup: q.setup });
     busy(false);
-    out.classList.toggle('err', Boolean(r.error));
-    out.textContent = r.error || r.stdout || '(no output)';
-    $('run-status').textContent = r.error ? '' : 'first example’s input · not graded';
+    say(r.error || r.stdout || 'no output', Boolean(r.error));
     return;
   }
 
@@ -453,13 +449,11 @@ async function doRun() {
     { mode: 'func', fn: q.fn, tests: [first], cmp: q.cmp || '', setup: q.setup, wrap: q.wrap });
   busy(false);
   const row = r.results && r.results[0];
-  out.classList.toggle('err', Boolean(r.error || (row && row.error)));
-  if (r.error) out.textContent = r.error;
-  else if (!row) out.textContent = r.stdout || '(no output)';
-  else if (row.error) out.textContent = row.error;
-  else out.textContent = (r.stdout ? r.stdout.replace(/\n?$/, '\n') : '') +
-    `${row.name}\n→ ${row.got}` + (row.pass ? '' : `\n  expected ${row.expected}`);
-  $('run-status').textContent = 'one example · not graded';
+  if (r.error) say(r.error, true);
+  else if (!row) say(r.stdout || 'no output');
+  else if (row.error) say(row.error, true);
+  else say((r.stdout ? r.stdout.replace(/\n?$/, '\n') : '') +
+    `${row.name}\n→ ${row.got}` + (row.pass ? '' : `\n  want ${row.expected}`), !row.pass);
 }
 
 function submitOrNext() {
@@ -469,7 +463,7 @@ function submitOrNext() {
 
 async function doSubmit() {
   if (!(await ensurePy())) return;
-  busy(true, 'checking…');
+  busy(true);
   const spec = q.mode === 'stdout'
     ? { mode: 'stdout', tests: q.tests, setup: q.setup }
     : { mode: 'func', fn: q.fn, tests: q.tests, cmp: q.cmp || '', setup: q.setup, wrap: q.wrap };
@@ -477,15 +471,13 @@ async function doSubmit() {
   busy(false);
   session.submitted = true;
 
-  const out = $('output');
-  out.classList.toggle('err', Boolean(r.error));
-  out.textContent = r.error ? r.error : (r.stdout || '(no output)');
-
   if (r.error) {
     session.failedSubmits++;
-    $('results').innerHTML = '<div class="verdict fail">Your code did not run</div>';
+    say(r.error, true);
+    $('results').innerHTML = '<div class="verdict fail">It did not run</div>';
     return;
   }
+  say(r.stdout || '');
 
   const passed = r.results.filter((t) => t.pass).length;
   const allPass = passed === r.results.length && r.results.length > 0;
@@ -499,22 +491,23 @@ async function doSubmit() {
       const v = $('results').querySelector('.verdict');
       if (v) v.textContent += `  ·  ${sign}${(moved.delta / 100).toFixed(2)} → Lv ${levelStr(moved.rating)}`;
     }
-    $('next-row').classList.remove('hidden');
+    $('submit').classList.add('hidden');
+    $('next').classList.remove('hidden');
     $('next').focus();
   } else {
     session.failedSubmits++;
   }
 }
 
+/** Only what went wrong. A pass needs one line, not a list of ticks. */
 function renderCases(rows, passed, allPass) {
   const head = `<div class="verdict ${allPass ? 'pass' : 'fail'}">` +
-    (allPass ? `All ${rows.length} tests passed` : `${passed} / ${rows.length} tests passed`) + '</div>';
-  const body = rows.map((t) => `
-    <div class="tcase ${t.pass ? 'pass' : 'fail'}">
-      <span class="mark">${t.pass ? '✓' : '✗'}</span>
+    (allPass ? 'Passed' : `${rows.length - passed} of ${rows.length} failed`) + '</div>';
+  const body = allPass ? '' : rows.filter((t) => !t.pass).slice(0, 4).map((t) => `
+    <div class="tcase">
       <div class="body">
-        <div class="mono">${esc(t.name)}</div>
-        ${t.pass ? '' : `<pre>expected: ${esc(t.expected)}\ngot:      ${esc(t.got)}</pre>`}
+        <div>${esc(t.name)}</div>
+        <pre>got  ${esc(t.got)}\nwant ${esc(t.expected)}</pre>
         ${t.error ? `<pre>${esc(t.error)}</pre>` : ''}
       </div>
     </div>`).join('');
@@ -572,15 +565,15 @@ function flashDelta(delta) {
 
 async function ensurePy() {
   if (pyReady) return true;
-  $('output').textContent = 'Python is still loading — one moment…';
+  say('Starting Python…');
   const ok = await runner.whenReady();
-  if (!ok) { $('output').textContent = 'Python failed to load. Check your connection and reload.'; }
+  say(ok ? '' : 'Python failed to load. Check your connection and reload.', !ok);
   return ok;
 }
 
-function busy(on, label) {
-  $('run').disabled = on; $('submit').disabled = on;
-  $('run-status').textContent = on ? (label || '…') : '';
+function busy(on) {
+  $('run').disabled = on;
+  $('submit').disabled = on;
 }
 
 /* ---------------- header / stats / bank ---------------- */
@@ -590,11 +583,7 @@ function render() {
   $('level-chip').textContent = 'Lv ' + levelStr(p.rating);
   const u = store.user;
   $('signin').classList.toggle('hidden', Boolean(u) || !firebaseEnabled);
-  $('account').classList.toggle('hidden', !u);
-  if (u) {
-    $('avatar').src = u.photo || '';
-    $('avatar').title = u.name || u.email || '';
-  }
+  $('signout').classList.toggle('hidden', !u);
   if (Number($('diff-slider').value) !== (store.progress.offset || 0)) {
     $('diff-slider').value = store.progress.offset || 0;
     paintSliderLabel();
@@ -687,25 +676,21 @@ function renderBank() {
     })
     .sort((a, b) => a.rating - b.rating);
 
-  // Ten thousand rows would choke the DOM — show a slice and say so.
+  // Ten thousand rows would choke the DOM — show a slice.
   const shown = rows.slice(0, BANK_ROWS_SHOWN);
-  const head = `<div class="dim tiny">${rows.length.toLocaleString()} question${rows.length === 1 ? '' : 's'} match` +
-    (rows.length > shown.length ? ` — showing the ${shown.length} easiest; search or filter to narrow it down` : '') + '</div>';
-
-  $('bank-list').innerHTML = (rows.length ? head : '') + (shown.map((x) => {
+  $('bank-list').innerHTML = shown.map((x) => {
     const s = p.byQuestion[x.id];
-    const st = !s ? '<span class="st un">unseen</span>'
-      : s.solved ? '<span class="st ok">solved</span>' : '<span class="st no">unsolved</span>';
+    const st = !s ? '<span class="st un">·</span>'
+      : s.solved ? '<span class="st ok">✓</span>' : '<span class="st no">✗</span>';
     return `<div class="brow" data-id="${x.id}">
-      <span>${esc(x.title)} <span class="dim tiny">· ${esc(x.topic)}</span></span>
-      ${st}<span class="dim tiny">Lv ${levelStr(s && s.rating ? s.rating : x.rating)}</span>
+      <span>${esc(x.title)}</span>${st}
     </div>`;
-  }).join('') || '<div class="dim">Nothing matches.</div>');
+  }).join('') || '<div class="dim">Nothing matches.</div>';
 
   $('bank-list').querySelectorAll('.brow').forEach((el) => {
     el.onclick = () => {
       nextQuestion(el.dataset.id);
-      document.querySelector('.tab[data-view="practice"]').click();
+      show('practice');
     };
   });
 }

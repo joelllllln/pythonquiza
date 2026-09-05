@@ -16,86 +16,35 @@
 <body>
 
 <header class="bar">
-  <span class="logo">🐍</span>
-  <nav class="tabs">
-    <button class="tab on" data-view="practice">Practice</button>
-    <button class="tab" data-view="stats">Stats</button>
-    <button class="tab" data-view="bank">Bank</button>
-  </nav>
-  <span id="level-chip" class="lv" title="Your level">Lv —</span>
-  <button id="signin" class="btn ghost xs">Sign in</button>
-  <span id="account" class="acct hidden">
-    <img id="avatar" alt="" referrerpolicy="no-referrer">
-    <button id="signout" class="btn ghost xs">Out</button>
-  </span>
+  <button id="menu-btn" class="icon" aria-label="Menu">⋯</button>
+  <button id="level-chip" class="lv" aria-label="Difficulty">Lv —</button>
 </header>
 
-<div id="banner" class="banner hidden"></div>
 <div id="toast" class="toast hidden"></div>
 
 <!-- ============ PRACTICE ============ -->
 <main id="view-practice" class="view practice">
 
-  <section class="pane ask">
+  <section class="ask">
     <div class="ask-scroll">
-      <div class="qhead">
-        <h1 id="q-title">Loading…</h1>
-        <button id="skip" class="btn ghost xs">Skip</button>
-      </div>
-      <div class="qmeta">
-        <span id="q-topic"></span>
-        <span id="q-diff" class="lv"></span>
-        <span id="q-timer" class="mono">0:00</span>
-      </div>
+      <h1 id="q-title">Loading…</h1>
       <div id="q-body" class="prose"></div>
-      <div id="q-tests" class="tests"></div>
+      <details id="examples"><summary>Examples</summary><div id="q-tests"></div></details>
       <div id="hint-box" class="hints hidden"></div>
-    </div>
-
-    <div class="tools">
-      <div class="tool-row">
-        <button id="too-hard" class="btn ghost xs">↓ Too hard</button>
-        <button id="too-easy" class="btn ghost xs">↑ Too easy</button>
-      </div>
-      <div class="tool-row help">
-        <button id="hint-btn" class="btn ghost xs">Hint</button>
-        <button id="big-hint" class="btn ghost xs"
-                title="Most of the model answer">Big hint</button>
-        <button id="reveal" class="btn ghost xs"
-                title="Shows the model answer — counts as a miss">Answer</button>
-      </div>
-      <div class="tool-row aim">
-        <input id="diff-slider" type="range" min="-500" max="500" step="10" value="0"
-               aria-label="Aim easier or harder">
-        <span id="diff-val" class="mono dim">+0.0</span>
-      </div>
-      <div id="target-label" class="dim tiny"></div>
     </div>
   </section>
 
-  <section class="pane code">
-    <div class="chead">
-      <span class="dim mono tiny">solution.py</span>
-      <span class="row">
-        <button id="reset-code" class="btn ghost xs">Reset</button>
-        <button id="run" class="btn xs">Run</button>
-        <button id="submit" class="btn primary xs" title="Ctrl/⌘ + Enter">Submit</button>
-      </span>
-    </div>
-
+  <section class="code">
     <div id="editor-wrap"><textarea id="editor"></textarea></div>
-
     <div class="console">
-      <div class="chead sub">
-        <span class="dim tiny">Output</span>
-        <span id="run-status" class="dim tiny"></span>
-      </div>
-      <pre id="output" class="out">Loading Python…</pre>
+      <pre id="output" class="out hidden"></pre>
       <div id="results" class="results"></div>
-      <div id="next-row" class="tool-row end hidden">
-        <button id="show-sol" class="btn ghost xs">Solution</button>
-        <button id="next" class="btn primary xs" title="Ctrl/⌘ + Enter">Next →</button>
-      </div>
+    </div>
+    <div class="actions">
+      <button id="hint-btn" class="btn ghost">Hint</button>
+      <button id="run" class="btn">Run</button>
+      <button id="submit" class="btn primary">Check</button>
+      <button id="next" class="btn primary hidden">Next →</button>
     </div>
   </section>
 
@@ -103,68 +52,88 @@
 
 <!-- ============ STATS ============ -->
 <main id="view-stats" class="view scroll hidden">
+  <button class="back" data-view="practice">‹ Back</button>
   <div class="cards">
     <div class="card"><b id="s-level">—</b><span>Level</span></div>
     <div class="card"><b id="s-acc">—</b><span>Accuracy</span></div>
     <div class="card"><b id="s-streak">—</b><span>Streak</span></div>
     <div class="card"><b id="s-solved">—</b><span>Solved</span></div>
-    <div class="card"><b id="s-attempts">—</b><span>Attempts</span></div>
-    <div class="card"><b id="s-time">—</b><span>Median</span></div>
   </div>
-
-  <section class="pane block">
-    <h2>Level over time</h2>
+  <div class="block">
     <svg id="chart" viewBox="0 0 600 180" preserveAspectRatio="none" class="chart"></svg>
-    <div class="dim tiny" id="chart-note"></div>
-  </section>
-
-  <section class="pane block">
-    <h2>Topics</h2>
-    <div id="topics" class="topics"></div>
-  </section>
-
-  <section class="pane block">
-    <h2>Recent</h2>
-    <div id="history" class="history"></div>
-    <div class="tool-row end">
-      <button id="recalibrate" class="btn ghost xs">Set level again</button>
-      <button id="export" class="btn ghost xs">Export</button>
-      <button id="reset-progress" class="btn ghost xs danger">Reset</button>
-    </div>
-  </section>
+  </div>
+  <div class="block"><div id="topics" class="topics"></div></div>
+  <div class="block"><div id="history" class="history"></div></div>
+  <div class="block row-end">
+    <button id="export" class="btn ghost xs">Export</button>
+    <button id="reset-progress" class="btn ghost xs danger">Reset all</button>
+  </div>
+  <span id="s-attempts" class="hidden"></span><span id="s-time" class="hidden"></span>
+  <span id="chart-note" class="hidden"></span>
 </main>
 
 <!-- ============ BANK ============ -->
 <main id="view-bank" class="view scroll hidden">
-  <section class="pane block">
-    <div class="filters">
-      <input id="bank-search" placeholder="Search…">
-      <select id="bank-topic"><option value="">All topics</option></select>
-      <select id="bank-state">
-        <option value="">All</option>
-        <option value="unseen">Unseen</option>
-        <option value="solved">Solved</option>
-        <option value="failed">Unsolved</option>
-      </select>
-    </div>
-    <div class="dim tiny" id="bank-note"></div>
-    <div id="bank-list" class="bank-list"></div>
-  </section>
+  <button class="back" data-view="practice">‹ Back</button>
+  <div class="filters">
+    <input id="bank-search" placeholder="Search">
+    <select id="bank-topic"><option value="">All</option></select>
+    <select id="bank-state">
+      <option value="">All</option>
+      <option value="unseen">Unseen</option>
+      <option value="solved">Solved</option>
+      <option value="failed">Unsolved</option>
+    </select>
+  </div>
+  <div id="bank-list" class="bank-list"></div>
+  <span id="bank-note" class="hidden"></span>
 </main>
 
-<!-- ============ FIRST-RUN CALIBRATION ============ -->
-<div id="calibrate" class="overlay hidden">
-  <div class="cal">
-    <h2>Where should we start you?</h2>
-    <p class="dim tiny">Only sets your starting point. Every answer moves your level after that.</p>
-    <div class="levels">
-      <button class="lvl" data-rating="720"><b>New to Python</b><span>print, variables, if, loops</span></button>
-      <button class="lvl" data-rating="950"><b>Know the basics</b><span>lists, strings, dicts, functions</span></button>
-      <button class="lvl" data-rating="1250"><b>Comfortable</b><span>comprehensions, sorting, classes</span></button>
-      <button class="lvl" data-rating="1600"><b>Strong</b><span>recursion, sliding windows, DP</span></button>
-      <button class="lvl" data-rating="2000"><b>Interview prep</b><span>trees, graphs, LeetCode-style</span></button>
+<!-- ============ DIFFICULTY SHEET ============ -->
+<div id="sheet-level" class="sheet hidden">
+  <div class="card-sheet">
+    <div class="lvl-big" id="lvl-big">Lv —</div>
+    <input id="diff-slider" type="range" min="-500" max="500" step="10" value="0"
+           aria-label="Easier or harder">
+    <div class="ends"><span>Easier</span><span>Harder</span></div>
+    <div class="two">
+      <button id="too-hard" class="btn">Too hard</button>
+      <button id="too-easy" class="btn">Too easy</button>
     </div>
-    <button id="cal-skip" class="btn ghost xs">Not sure — start in the middle</button>
+    <span id="diff-val" class="hidden"></span>
+    <span id="target-label" class="hidden"></span>
+  </div>
+</div>
+
+<!-- ============ MENU SHEET ============ -->
+<div id="sheet-menu" class="sheet hidden">
+  <div class="card-sheet menu">
+    <button data-view="stats">Stats</button>
+    <button data-view="bank">All questions</button>
+    <button id="skip">Skip</button>
+    <button id="reset-code">Clear code</button>
+    <button id="recalibrate">Set my level</button>
+    <button id="signin">Sign in</button>
+    <button id="signout" class="hidden">Sign out</button>
+    <img id="avatar" class="hidden" alt="" referrerpolicy="no-referrer">
+    <span id="account" class="hidden"></span>
+    <span id="banner" class="hidden"></span>
+    <span id="show-sol" class="hidden"></span>
+  </div>
+</div>
+
+<!-- ============ FIRST RUN ============ -->
+<div id="calibrate" class="sheet hidden">
+  <div class="card-sheet">
+    <h2>Start me at</h2>
+    <div class="levels">
+      <button class="lvl" data-rating="720">New to Python</button>
+      <button class="lvl" data-rating="950">Know the basics</button>
+      <button class="lvl" data-rating="1250">Comfortable</button>
+      <button class="lvl" data-rating="1600">Strong</button>
+      <button class="lvl" data-rating="2000">Interview prep</button>
+    </div>
+    <button id="cal-skip" class="btn ghost xs">Not sure</button>
   </div>
 </div>
 
