@@ -302,3 +302,72 @@ h1,h2{margin:0;font-weight:600;letter-spacing:-0.015em}
   padding:11px 17px;font:400 13px/1.4 var(--sans);
   max-width:calc(100vw - 32px);text-align:center
 }
+
+/* ---------- light: the same idea on warm paper ----------
+   Dark is the default. The system preference switches this on unless the
+   reader has explicitly chosen dark, and the menu toggle wins over both by
+   stamping data-theme on the root. */
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){
+    --ink:#F7F4EC;
+    --panel:#FFFDF8;
+    --raised:#EFEAE0;
+    --line:#E2DBCC;
+    --text:#1C1913;
+    --muted:#6B6458;
+    --faint:#9C9486;
+    --accent:#96590E;
+    --pass:#4A7A2C;
+    --fail:#B2402C;
+  }
+  :root:not([data-theme="dark"]) .prose{color:#332E24}
+  :root:not([data-theme="dark"]) .hints{color:#3B342A}
+  :root:not([data-theme="dark"]) ::selection{background:#96590E2B}
+  :root:not([data-theme="dark"]) .btn.primary{color:#FFFDF8}
+  :root:not([data-theme="dark"]) .verdict.pass{background:#EDF3E6;border-color:#CFE0BF}
+  :root:not([data-theme="dark"]) .verdict.fail{background:#FBEAE6;border-color:#EFCFC7}
+  :root:not([data-theme="dark"]) .btn.danger:hover{border-color:#EFCFC7}
+  :root:not([data-theme="dark"]) .CodeMirror-linenumber{color:#C3BBA9}
+  :root:not([data-theme="dark"]) .CodeMirror-selected{background:#EAE2D2 !important}
+  :root:not([data-theme="dark"]) .cm-s-default .cm-keyword{color:#A63D33}
+  :root:not([data-theme="dark"]) .cm-s-default .cm-string,
+  :root:not([data-theme="dark"]) .cm-s-default .cm-string-2{color:#4C7228}
+  :root:not([data-theme="dark"]) .cm-s-default .cm-number{color:#9A5A15}
+  :root:not([data-theme="dark"]) .cm-s-default .cm-comment{color:#A79E8D}
+  :root:not([data-theme="dark"]) .cm-s-default .cm-builtin,
+  :root:not([data-theme="dark"]) .cm-s-default .cm-atom{color:#2C6360}
+  :root:not([data-theme="dark"]) .cm-s-default .cm-operator{color:#6B6458}
+  :root:not([data-theme="dark"]) .sheet{background:#1C191359}
+}
+
+/* An explicit choice of light beats the system preference. */
+:root[data-theme="light"]{
+  --ink:#F7F4EC;
+  --panel:#FFFDF8;
+  --raised:#EFEAE0;
+  --line:#E2DBCC;
+  --text:#1C1913;
+  --muted:#6B6458;
+  --faint:#9C9486;
+  --accent:#96590E;
+  --pass:#4A7A2C;
+  --fail:#B2402C;
+}
+:root[data-theme="light"] .prose{color:#332E24}
+:root[data-theme="light"] .hints{color:#3B342A}
+:root[data-theme="light"] ::selection{background:#96590E2B}
+:root[data-theme="light"] .btn.primary{color:#FFFDF8}
+:root[data-theme="light"] .verdict.pass{background:#EDF3E6;border-color:#CFE0BF}
+:root[data-theme="light"] .verdict.fail{background:#FBEAE6;border-color:#EFCFC7}
+:root[data-theme="light"] .btn.danger:hover{border-color:#EFCFC7}
+:root[data-theme="light"] .CodeMirror-linenumber{color:#C3BBA9}
+:root[data-theme="light"] .CodeMirror-selected{background:#EAE2D2 !important}
+:root[data-theme="light"] .cm-s-default .cm-keyword{color:#A63D33}
+:root[data-theme="light"] .cm-s-default .cm-string,
+:root[data-theme="light"] .cm-s-default .cm-string-2{color:#4C7228}
+:root[data-theme="light"] .cm-s-default .cm-number{color:#9A5A15}
+:root[data-theme="light"] .cm-s-default .cm-comment{color:#A79E8D}
+:root[data-theme="light"] .cm-s-default .cm-builtin,
+:root[data-theme="light"] .cm-s-default .cm-atom{color:#2C6360}
+:root[data-theme="light"] .cm-s-default .cm-operator{color:#6B6458}
+:root[data-theme="light"] .sheet{background:#1C191359}

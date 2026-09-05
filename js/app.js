@@ -25,6 +25,41 @@ let session = null;        // {startedAt, failedSubmits, hints, submitted}
 let tick = null;
 let pyReady = false;
 
+/* ---------------- appearance ---------------- */
+
+const THEME_KEY = 'pyquiz.theme';
+
+/** '' means follow the system; otherwise 'light' or 'dark'. */
+function storedTheme() {
+  try { return localStorage.getItem(THEME_KEY) || ''; } catch { return ''; }
+}
+
+function systemIsLight() {
+  return window.matchMedia('(prefers-color-scheme: light)').matches;
+}
+
+function isLight() {
+  const t = storedTheme();
+  return t ? t === 'light' : systemIsLight();
+}
+
+function applyTheme() {
+  const t = storedTheme();
+  if (t) document.documentElement.dataset.theme = t;
+  else delete document.documentElement.dataset.theme;
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', isLight() ? '#F7F4EC' : '#12110E');
+  const btn = document.getElementById('theme-btn');
+  if (btn) btn.textContent = isLight() ? 'Dark mode' : 'Light mode';
+}
+
+function toggleTheme() {
+  try { localStorage.setItem(THEME_KEY, isLight() ? 'dark' : 'light'); } catch {}
+  applyTheme();
+  closeSheets();
+  if (editor) editor.refresh();
+}
+
 /* ---------------- boot ---------------- */
 
 /** Phones get a different editor: it grows with the code and the page
@@ -61,6 +96,10 @@ function boot() {
   input.setAttribute('spellcheck', 'false');
 
   editor.on('change', () => { if (q) store.draft(q.id, editor.getValue()); });
+
+  applyTheme();
+  window.matchMedia('(prefers-color-scheme: light)')
+    .addEventListener('change', applyTheme);
 
   wireUI();
   store.init().then(() => { render(); showBanner(); });
@@ -133,6 +172,7 @@ function wireUI() {
   });
   $('cal-skip').onclick = () => setLevel(START_RATING);
   $('recalibrate').onclick = () => { closeSheets(); show('practice'); askLevel(); };
+  $('theme-btn').onclick = toggleTheme;
 
   $('signin').onclick = async () => {
     closeSheets();
