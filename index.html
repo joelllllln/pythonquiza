@@ -31,6 +31,24 @@
 </header>
 
 <div id="banner" class="banner hidden"></div>
+<div id="toast" class="toast hidden"></div>
+
+<!-- ============ FIRST-RUN CALIBRATION ============ -->
+<div id="calibrate" class="overlay hidden">
+  <div class="cal-card">
+    <h2>Where should we start you?</h2>
+    <p class="muted small">Pick the closest one. It only sets your starting point — every answer moves your
+      level after that, and you can nudge it any time with the slider or the “too easy / too hard” buttons.</p>
+    <div class="levels">
+      <button class="lvl" data-rating="720"><b>New to Python</b><span>print, variables, if, simple loops</span></button>
+      <button class="lvl" data-rating="950"><b>Know the basics</b><span>lists, strings, dicts, writing functions</span></button>
+      <button class="lvl" data-rating="1250"><b>Comfortable</b><span>comprehensions, sorting keys, classes</span></button>
+      <button class="lvl" data-rating="1600"><b>Strong</b><span>recursion, sliding windows, basic DP</span></button>
+      <button class="lvl" data-rating="2000"><b>Interview prep</b><span>trees, graphs, DP, LeetCode-style</span></button>
+    </div>
+    <button id="cal-skip" class="btn ghost small">Not sure — start me in the middle</button>
+  </div>
+</div>
 
 <!-- ============ PRACTICE ============ -->
 <main id="view-practice" class="view">
@@ -48,11 +66,17 @@
     </div>
     <div id="q-body" class="q-body"></div>
 
+    <div class="feedback">
+      <span class="muted small">Wrong level?</span>
+      <button id="too-easy" class="btn ghost small">Too easy — harder ↑</button>
+      <button id="too-hard" class="btn ghost small">Too hard — easier ↓</button>
+    </div>
+
     <div class="diffctl">
-      <label for="diff-slider">Difficulty tuning <span id="diff-val">±0.0</span></label>
-      <input id="diff-slider" type="range" min="-400" max="400" step="10" value="0">
+      <label for="diff-slider">Aim easier or harder <span id="diff-val">±0.0</span></label>
+      <input id="diff-slider" type="range" min="-500" max="500" step="10" value="0">
       <div class="hint-row">
-        <span class="muted" id="target-label"></span>
+        <span class="muted small" id="target-label"></span>
         <button id="hint-btn" class="btn ghost small">Hint</button>
       </div>
       <div id="hint-box" class="hintbox hidden"></div>
@@ -111,6 +135,7 @@
     <h3>Recent attempts</h3>
     <div id="history" class="history"></div>
     <div class="row-end">
+      <button id="recalibrate" class="btn ghost small">Set my level again</button>
       <button id="export" class="btn ghost small">Export JSON</button>
       <button id="reset-progress" class="btn ghost small danger">Reset progress</button>
     </div>

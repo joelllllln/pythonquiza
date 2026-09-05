@@ -63,6 +63,25 @@ export function updatePlayer(playerRating, question, attempt, totalAttempts) {
   return { rating: round2(next), delta: round2(next - playerRating), score: round2(score) };
 }
 
+/**
+ * "Too easy" / "too hard" pressed on a question you have not answered.
+ *
+ * This is deliberately blunter than a graded attempt — it is the player
+ * telling us we aimed wrong, so it should move things enough to feel like
+ * something happened. The step shrinks as more feedback arrives, so early
+ * presses find the right ballpark fast and later ones only fine-tune.
+ *
+ * Returns { rating, delta, step }.
+ */
+export function feedbackAdjust(playerRating, questionRating, tooHard, feedbackCount = 0) {
+  const step = feedbackCount < 2 ? 110 : feedbackCount < 5 ? 70 : feedbackCount < 10 ? 45 : 28;
+  const anchor = tooHard
+    ? Math.min(playerRating, questionRating) - step
+    : Math.max(playerRating, questionRating) + step;
+  const next = clamp(anchor, MIN_RATING, MAX_RATING);
+  return { rating: round2(next), delta: round2(next - playerRating), step };
+}
+
 /** Small local recalibration of a question's own rating. */
 export function updateQuestion(qRating, playerRating, score) {
   const e = expected(qRating, playerRating);
@@ -77,7 +96,9 @@ export function updateQuestion(qRating, playerRating, score) {
  */
 export function pickQuestion(bank, prog, opts = {}) {
   const target = (opts.target ?? START_RATING);
-  const spread = opts.spread ?? 130;
+  // Tight where the bank is dense, wider at the top end where only the
+  // hand-written interview questions live and there is less to choose from.
+  const spread = opts.spread ?? (target > 2000 ? 170 : 95);
   const now = Date.now();
   const weak = weakTopics(prog);
   const pool = [];
@@ -89,11 +110,14 @@ export function pickQuestion(bank, prog, opts = {}) {
     const qr = st && st.rating ? st.rating : q.rating;
     let w = Math.exp(-Math.pow((qr - target) / spread, 2));
 
-    if (!st) w *= 1.9;                                   // unseen: prefer
-    else if (!st.solved) w *= 1.25;                      // seen, never solved
-    else {
+    if (!st) {
+      w *= 1.9;                                          // unseen: prefer
+    } else {
+      // Anything already put in front of you — solved, failed, or waved away
+      // as too easy or too hard — steps back for a while.
       const days = (now - (st.lastAt || 0)) / 86400000;
-      w *= days < 1 ? 0.03 : days < 4 ? 0.2 : days < 14 ? 0.5 : 0.85;
+      const recency = days < 1 ? 0.04 : days < 4 ? 0.22 : days < 14 ? 0.55 : 0.9;
+      w *= recency * (st.solved ? 1 : 1.35);
     }
     if (weak.has(q.topic)) w *= 1.7;
     if (opts.topic && q.topic !== opts.topic) w *= 0.02;

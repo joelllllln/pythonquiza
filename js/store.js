@@ -18,6 +18,9 @@ export function blankProgress() {
     solved: 0,
     streak: 0,
     bestStreak: 0,
+    calibrated: false,// has the player picked a starting level?
+    offset: 0,        // the "aim easier/harder" slider, in rating points
+    feedback: 0,      // how many times they have said too easy / too hard
     byTopic: {},      // topic -> {attempts, solved, secs}
     byQuestion: {},   // qid   -> {attempts, solved, bestSecs, lastAt, rating}
     history: [],      // newest last: {qid, title, topic, ok, secs, at, rating, delta}
@@ -173,6 +176,9 @@ export function merge(a, b) {
   out.solved = Math.max(a.solved || 0, b.solved || 0);
   out.streak = newer.streak || 0;
   out.bestStreak = Math.max(a.bestStreak || 0, b.bestStreak || 0);
+  out.calibrated = Boolean(a.calibrated || b.calibrated);
+  out.offset = newer.offset || 0;
+  out.feedback = Math.max(a.feedback || 0, b.feedback || 0);
   out.updated = Math.max(a.updated || 0, b.updated || 0);
 
   for (const src of [a, b]) {

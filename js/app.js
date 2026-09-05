@@ -5,7 +5,7 @@ import { Store } from './store.js';
 import { buildIndex, getQuestion, templateCount, handwrittenCount } from './bank.js';
 import { firebaseEnabled } from './config.js';
 import {
-  START_RATING, levelStr, parSeconds, pickQuestion,
+  START_RATING, levelStr, parSeconds, pickQuestion, feedbackAdjust,
   updatePlayer, updateQuestion, weakTopics,
 } from './rating.js';
 
@@ -48,6 +48,28 @@ function boot() {
   wireUI();
   store.init().then(() => { render(); showBanner(); });
   buildTopicFilter();
+
+  $('diff-slider').value = store.progress.offset || 0;
+  paintSliderLabel();
+
+  if (!store.progress.calibrated && store.progress.attempts === 0) askLevel();
+  else nextQuestion();
+  render();
+}
+
+/* ---------------- picking a starting level ---------------- */
+
+/** First run: ask instead of guessing, so the first question is not a lottery. */
+function askLevel() {
+  $('calibrate').classList.remove('hidden');
+}
+
+function setLevel(rating) {
+  store.progress.rating = rating;
+  store.progress.calibrated = true;
+  store.progress.curve.push({ at: Date.now(), rating });
+  store.save();
+  $('calibrate').classList.add('hidden');
   nextQuestion();
   render();
 }
@@ -75,9 +97,28 @@ function wireUI() {
   $('show-sol').onclick = showSolution;
   $('hint-btn').onclick = showHint;
 
-  $('diff-slider').oninput = (e) => {
-    $('diff-val').textContent = (e.target.value >= 0 ? '+' : '') + (e.target.value / 100).toFixed(1);
-    updateTargetLabel();
+  // The slider is only useful if it does something now: dragging it re-picks
+  // the question straight away, unless you have already solved this one.
+  $('diff-slider').oninput = paintSliderLabel;
+  $('diff-slider').onchange = () => {
+    store.progress.offset = Number($('diff-slider').value || 0);
+    store.save();
+    if (!session || !session.done) {
+      nextQuestion();
+      toast(`Aiming at Lv ${levelStr(target())}`);
+    }
+  };
+
+  $('too-easy').onclick = () => rateDifficulty(false);
+  $('too-hard').onclick = () => rateDifficulty(true);
+
+  document.querySelectorAll('.lvl').forEach((b) => {
+    b.onclick = () => setLevel(Number(b.dataset.rating));
+  });
+  $('cal-skip').onclick = () => setLevel(START_RATING);
+  $('recalibrate').onclick = () => {
+    $('calibrate').classList.remove('hidden');
+    document.querySelector('.tab[data-view="practice"]').click();
   };
 
   $('signin').onclick = async () => {
@@ -94,7 +135,14 @@ function wireUI() {
     a.click();
   };
   $('reset-progress').onclick = () => {
-    if (confirm('Erase all progress on this account?')) { store.reset(); renderStats(); render(); }
+    if (!confirm('Erase all progress on this account?')) return;
+    store.reset();
+    $('diff-slider').value = 0;
+    paintSliderLabel();
+    renderStats();
+    render();
+    askLevel();
+    document.querySelector('.tab[data-view="practice"]').click();
   };
 
   $('bank-search').oninput = renderBank;
@@ -136,8 +184,55 @@ function target() {
   return store.progress.rating + Number($('diff-slider').value || 0);
 }
 
+function paintSliderLabel() {
+  const v = Number($('diff-slider').value || 0);
+  $('diff-val').textContent = (v >= 0 ? '+' : '') + (v / 100).toFixed(1);
+  updateTargetLabel();
+}
+
 function updateTargetLabel() {
-  $('target-label').textContent = `aiming at Lv ${levelStr(target())}`;
+  $('target-label').textContent =
+    `you: Lv ${levelStr(store.progress.rating)} · aiming at Lv ${levelStr(target())}`;
+}
+
+/** A short message that fades itself out. */
+let toastTimer = null;
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.remove('hidden');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.add('hidden'), 2600);
+}
+
+/**
+ * "Too easy" / "too hard" on the question in front of you: move the level,
+ * remember not to show this one again for a while, and hand over a new
+ * question at the corrected level immediately.
+ */
+function rateDifficulty(tooHard) {
+  const p = store.progress;
+  const st = p.byQuestion[q.id];
+  const qRating = st && st.rating ? st.rating : q.rating;
+  const { rating, delta } = feedbackAdjust(p.rating, qRating, tooHard, p.feedback);
+
+  p.rating = rating;
+  p.feedback += 1;
+  p.curve.push({ at: Date.now(), rating });
+  p.byQuestion[q.id] = {
+    attempts: 0, solved: false, bestSecs: null, rating: qRating,
+    ...(st || {}), lastAt: Date.now(), feedback: tooHard ? 'hard' : 'easy',
+  };
+  // Nudge the question itself the other way, so the bank calibrates too.
+  p.byQuestion[q.id].rating = updateQuestion(qRating, rating, tooHard ? 0 : 1);
+  store.save();
+
+  session.done = true;   // this one no longer counts as attempted
+  clearInterval(tick);
+  nextQuestion();
+  toast(`${tooHard ? 'Easier' : 'Harder'} it is — you are now Lv ${levelStr(rating)} ` +
+        `(${delta >= 0 ? '+' : ''}${(delta / 100).toFixed(2)})`);
+  render();
 }
 
 function nextQuestion(forcedId) {
@@ -340,6 +435,10 @@ function render() {
   if (u) {
     $('avatar').src = u.photo || '';
     $('avatar').title = u.name || u.email || '';
+  }
+  if (Number($('diff-slider').value) !== (store.progress.offset || 0)) {
+    $('diff-slider').value = store.progress.offset || 0;
+    paintSliderLabel();
   }
   updateTargetLabel();
 }
