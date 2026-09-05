@@ -30,13 +30,13 @@ let pyReady = false;
 function boot() {
   editor = CodeMirror.fromTextArea($('editor'), {
     mode: 'python',
-    theme: 'material-darker',
+    theme: 'default',
     lineNumbers: true,
     indentUnit: 4,
     tabSize: 4,
     indentWithTabs: false,
     autoCloseBrackets: true,
-    viewportMargin: Infinity,
+    viewportMargin: 20,
     extraKeys: {
       'Ctrl-Enter': () => doSubmit(),
       'Cmd-Enter': () => doSubmit(),
@@ -172,7 +172,7 @@ function onRunnerStatus(kind, msg) {
 function showBanner() {
   const b = $('banner');
   if (!firebaseEnabled) {
-    b.className = 'banner warn';
+    b.className = 'banner';
     b.innerHTML = 'Progress is saved in this browser only. Add a Firebase project in <code>js/config.js</code> to sign in with Google and sync every device — see the README.';
     b.classList.remove('hidden');
   }
@@ -296,7 +296,7 @@ function showHint() {
 function showSolution() {
   if (!session.done) endSession(false);
   $('results').innerHTML =
-    `<div class="verdict fail">Model answer</div><pre class="output">${esc(q.solution)}</pre>`;
+    `<div class="verdict fail">Model answer</div><pre class="out">${esc(q.solution)}</pre>`;
   $('next-row').classList.remove('hidden');
 }
 
@@ -465,18 +465,18 @@ function renderStats() {
       const pct = s.attempts ? Math.round((s.solved / s.attempts) * 100) : 0;
       const cls = pct < 50 ? 'weak' : pct < 75 ? 'mid' : '';
       return `<div class="trow">
-        <span>${esc(t)}${weak.has(t) ? ' <span class="muted small">· needs work</span>' : ''}</span>
-        <span class="bar"><i class="${cls}" style="width:${pct}%"></i></span>
-        <span class="muted small">${pct}% · ${s.attempts}</span>
+        <span>${esc(t)}${weak.has(t) ? ' <span class="dim tiny">· needs work</span>' : ''}</span>
+        <span class="bar-track"><i class="${cls}" style="width:${pct}%"></i></span>
+        <span class="dim tiny">${pct}% · ${s.attempts}</span>
       </div>`;
     }).join('');
-  $('topics').innerHTML = rows || '<div class="muted">No attempts yet.</div>';
+  $('topics').innerHTML = rows || '<div class="dim">No attempts yet.</div>';
 
   $('history').innerHTML = p.history.slice(-40).reverse().map((h) => `
     <div class="hrow ${h.ok ? 'pass' : 'fail'}">
       <span>${h.ok ? '✓' : '✗'} ${esc(h.title || h.qid)}</span>
       <span class="t">${fmtSecs(h.secs)} · ${h.delta >= 0 ? '+' : ''}${(h.delta / 100).toFixed(2)}</span>
-    </div>`).join('') || '<div class="muted">Nothing yet — go solve something.</div>';
+    </div>`).join('') || '<div class="dim">Nothing yet — go solve something.</div>';
 }
 
 function drawChart(curve) {
@@ -530,7 +530,7 @@ function renderBank() {
 
   // Ten thousand rows would choke the DOM — show a slice and say so.
   const shown = rows.slice(0, BANK_ROWS_SHOWN);
-  const head = `<div class="muted small">${rows.length.toLocaleString()} question${rows.length === 1 ? '' : 's'} match` +
+  const head = `<div class="dim tiny">${rows.length.toLocaleString()} question${rows.length === 1 ? '' : 's'} match` +
     (rows.length > shown.length ? ` — showing the ${shown.length} easiest; search or filter to narrow it down` : '') + '</div>';
 
   $('bank-list').innerHTML = (rows.length ? head : '') + (shown.map((x) => {
@@ -538,10 +538,10 @@ function renderBank() {
     const st = !s ? '<span class="st un">unseen</span>'
       : s.solved ? '<span class="st ok">solved</span>' : '<span class="st no">unsolved</span>';
     return `<div class="brow" data-id="${x.id}">
-      <span>${esc(x.title)} <span class="muted small">· ${esc(x.topic)}</span></span>
-      ${st}<span class="muted small">Lv ${levelStr(s && s.rating ? s.rating : x.rating)}</span>
+      <span>${esc(x.title)} <span class="dim tiny">· ${esc(x.topic)}</span></span>
+      ${st}<span class="dim tiny">Lv ${levelStr(s && s.rating ? s.rating : x.rating)}</span>
     </div>`;
-  }).join('') || '<div class="muted">Nothing matches.</div>');
+  }).join('') || '<div class="dim">Nothing matches.</div>');
 
   $('bank-list').querySelectorAll('.brow').forEach((el) => {
     el.onclick = () => {

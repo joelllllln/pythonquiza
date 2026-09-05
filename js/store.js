@@ -66,7 +66,12 @@ export class Store {
   }
 
   async signIn() {
-    if (!this._fb) throw new Error('Cloud sync is not configured for this deployment.');
+    if (!this._fb) {
+      throw new Error(firebaseEnabled
+        // Configured, but the SDK never loaded — almost always the network.
+        ? 'Could not reach Google sign-in. Check your connection and reload.'
+        : 'Cloud sync is not configured for this deployment.');
+    }
     const { authMod, auth } = this._fb;
     const provider = new authMod.GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
