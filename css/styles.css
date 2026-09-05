@@ -137,12 +137,20 @@ h1,h2{margin:0;font-weight:600}
   padding:2px 0 2px 10px;font-size:13.5px;color:#d8cfae
 }
 .hints div+div{margin-top:7px}
+.hints pre{
+  margin:6px 0 0;background:var(--bg);border-radius:6px;padding:8px 10px;
+  font-size:12.5px;line-height:1.45;white-space:pre-wrap;word-break:break-word;color:var(--fg)
+}
+@media(max-width:959px),(pointer:coarse){.hints pre{font-size:14px}}
 
 /* ---------- difficulty tools ---------- */
 .tools{flex:0 0 auto;margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}
 .tool-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .tool-row.end{justify-content:flex-end;margin-top:10px}
 .tool-row .btn{flex:1}
+.tool-row.help{margin-top:6px}
+#reveal{color:#b58a8e}
+#reveal:hover{color:var(--bad);background:var(--raised)}
 .aim{margin-top:8px}
 .aim input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 #diff-val{width:38px;text-align:right;font-size:12px}

@@ -113,6 +113,8 @@ function wireUI() {
   $('reset-code').onclick = () => { editor.setValue(q.starter || ''); editor.focus(); };
   $('show-sol').onclick = showSolution;
   $('hint-btn').onclick = showHint;
+  $('big-hint').onclick = showBigHint;
+  $('reveal').onclick = revealAnswer;
 
   // The slider is only useful if it does something now: dragging it re-picks
   // the question straight away, unless you have already solved this one.
@@ -268,7 +270,8 @@ function nextQuestion(forcedId) {
     : getQuestion(pickQuestion(INDEX, store.progress, { target: target(), excludeId: q && q.id }).id);
   q = chosen;
   rememberShown(q);
-  session = { startedAt: Date.now(), failedSubmits: 0, hints: 0, submitted: false, done: false };
+  session = { startedAt: Date.now(), failedSubmits: 0, hints: 0, shown: 0,
+              bigHint: false, submitted: false, solved: false, done: false };
 
   const st = store.progress.byQuestion[q.id];
   const shownRating = st && st.rating ? st.rating : q.rating;
@@ -282,6 +285,8 @@ function nextQuestion(forcedId) {
   $('hint-box').classList.add('hidden');
   $('hint-btn').disabled = !(q.hints && q.hints.length);
   $('hint-btn').textContent = 'Hint';
+  $('big-hint').disabled = false;
+  $('big-hint').textContent = 'Big hint';
   $('output').textContent = pyReady ? 'Ready.' : 'Loading Python…';
   $('output').classList.remove('err');
   $('results').innerHTML = '';
@@ -351,17 +356,68 @@ function startTimer() {
 
 function elapsed() { return Math.round((Date.now() - session.startedAt) / 1000); }
 
-function showHint() {
-  const hints = q.hints || [];
-  if (session.hints >= hints.length) return;
+function addHint(html) {
   const box = $('hint-box');
   const d = document.createElement('div');
-  d.innerHTML = md(hints[session.hints]);
+  d.innerHTML = html;
   box.appendChild(d);
   box.classList.remove('hidden');
+}
+
+/** A nudge. Costs a little rating; there are one to three per question. */
+function showHint() {
+  const hints = q.hints || [];
+  if (session.shown >= hints.length) return;
+  addHint(md(hints[session.shown]));
+  session.shown++;
   session.hints++;
-  $('hint-btn').textContent = session.hints < hints.length ? `Hint ${session.hints + 1}` : 'No more hints';
-  $('hint-btn').disabled = session.hints >= hints.length;
+  $('hint-btn').textContent = session.shown < hints.length ? `Hint ${session.shown + 1}` : 'No more hints';
+  $('hint-btn').disabled = session.shown >= hints.length;
+}
+
+/**
+ * Most of the answer, one step short of giving it away: the opening lines of
+ * the model answer, or — when it is only two or three lines long — the whole
+ * shape with the key expression blanked out. Costs as much as two hints.
+ */
+function bigHintFor(question) {
+  const lines = String(question.solution || '').replace(/\s+$/, '').split('\n');
+  if (lines.length <= 3) {
+    const last = lines[lines.length - 1];
+    const m = last.match(/^(\s*)(return |[a-zA-Z_][\w.]* = )(.+)$/);
+    if (m) {
+      return {
+        text: [...lines.slice(0, -1), m[1] + m[2] + '_____'].join('\n'),
+        note: 'The shape of the answer. Work out what belongs in the blank.',
+      };
+    }
+  }
+  const keep = Math.max(2, Math.ceil(lines.length / 2));
+  return {
+    text: lines.slice(0, keep).join('\n') + '\n    …',
+    note: 'How the model answer starts. Carry it on from there.',
+  };
+}
+
+function showBigHint() {
+  if (session.bigHint) return;
+  const { text, note } = bigHintFor(q);
+  addHint(`${esc(note)}<pre>${esc(text)}</pre>`);
+  session.bigHint = true;
+  session.hints += 2;
+  $('big-hint').disabled = true;
+  $('big-hint').textContent = 'Big hint shown';
+}
+
+/** The whole model answer, on demand. Counts the question as a miss. */
+function revealAnswer() {
+  if (!session.done) {
+    session.submitted = true;   // asking for the answer settles the question
+    endSession(false);
+  }
+  showSolution();
+  toast('Answer shown — counted as a miss');
+  render();
 }
 
 function showSolution() {
