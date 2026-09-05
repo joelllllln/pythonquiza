@@ -90,47 +90,87 @@ export function updateQuestion(qRating, playerRating, score) {
 }
 
 /**
+ * What makes two questions *feel* the same: the template they came from and
+ * the title it produced. Some templates vary only the numbers inside a
+ * question, so two different ids can read as one repeated question.
+ */
+export function signature(entry) {
+  const parts = String(entry.id).split(':');
+  const family = parts[0] === 'g' ? parts[1] : entry.id;
+  return family + '|' + (entry.title || '');
+}
+
+/** The last N signatures shown, newest first, as signature -> position. */
+export function recentMap(recent) {
+  const m = new Map();
+  const list = recent || [];
+  for (let i = list.length - 1, pos = 0; i >= 0; i--, pos++) {
+    if (!m.has(list[i])) m.set(list[i], pos);
+  }
+  return m;
+}
+
+/**
  * Pick the next question.
  * Gaussian weighting around (player rating + slider offset), with boosts for
- * unseen questions and weak topics, and heavy damping for recent solves.
+ * unseen questions and weak topics, heavy damping for anything already shown,
+ * and a short memory of what it *looked* like so near-identical variants of
+ * the same template do not come round again straight away.
  */
 export function pickQuestion(bank, prog, opts = {}) {
   const target = (opts.target ?? START_RATING);
   // Tight where the bank is dense, wider at the top end where only the
   // hand-written interview questions live and there is less to choose from.
-  const spread = opts.spread ?? (target > 2000 ? 170 : 95);
+  const baseSpread = opts.spread ?? (target > 2000 ? 170 : 95);
   const now = Date.now();
   const weak = weakTopics(prog);
-  const pool = [];
-  let total = 0;
+  const recent = opts.recent instanceof Map ? opts.recent : recentMap(prog.recent);
 
-  for (const q of bank) {
-    if (opts.excludeId && q.id === opts.excludeId) continue;
-    const st = prog.byQuestion[q.id];
-    const qr = st && st.rating ? st.rating : q.rating;
-    let w = Math.exp(-Math.pow((qr - target) / spread, 2));
+  function build(spread) {
+    const pool = [];
+    let total = 0;
+    let fresh = 0;
+    for (const q of bank) {
+      if (opts.excludeId && q.id === opts.excludeId) continue;
+      const st = prog.byQuestion[q.id];
+      const qr = st && st.rating ? st.rating : q.rating;
+      let w = Math.exp(-Math.pow((qr - target) / spread, 2));
 
-    if (!st) {
-      w *= 1.9;                                          // unseen: prefer
-    } else {
-      // Anything already put in front of you — solved, failed, or waved away
-      // as too easy or too hard — steps back for a while.
-      const days = (now - (st.lastAt || 0)) / 86400000;
-      const recency = days < 1 ? 0.04 : days < 4 ? 0.22 : days < 14 ? 0.55 : 0.9;
-      w *= recency * (st.solved ? 1 : 1.35);
+      if (!st) {
+        w *= 1.9;                                        // unseen: prefer
+      } else {
+        // Anything already put in front of you — solved, failed, or waved
+        // away as too easy or too hard — steps back for a while.
+        const days = (now - (st.lastAt || 0)) / 86400000;
+        const recency = days < 1 ? 0.04 : days < 4 ? 0.22 : days < 14 ? 0.55 : 0.9;
+        w *= recency * (st.solved ? 1 : 1.35);
+      }
+      // Anything that reads like something you just did goes to the back of
+      // the queue, however different its id is.
+      const pos = recent.get(signature(q));
+      if (pos !== undefined) w *= pos < 3 ? 0.004 : pos < 10 ? 0.03 : pos < 30 ? 0.2 : 0.55;
+
+      if (weak.has(q.topic)) w *= 1.7;
+      if (opts.topic && q.topic !== opts.topic) w *= 0.02;
+
+      if (w > 0.3) fresh += 1;
+      w = Math.max(w, 1e-6);
+      pool.push([q, w]);
+      total += w;
     }
-    if (weak.has(q.topic)) w *= 1.7;
-    if (opts.topic && q.topic !== opts.topic) w *= 0.02;
-
-    w = Math.max(w, 1e-6);
-    pool.push([q, w]);
-    total += w;
+    return { pool, total, fresh };
   }
-  if (!pool.length) return bank[0];
 
-  let r = Math.random() * total;
-  for (const [q, w] of pool) { r -= w; if (r <= 0) return q; }
-  return pool[pool.length - 1][0];
+  // When everything close to your level has just been used, cast wider
+  // rather than serving the same thing again.
+  let built = build(baseSpread);
+  if (built.fresh < 8) built = build(baseSpread * 2.4);
+  if (built.fresh < 4) built = build(baseSpread * 5);
+  if (!built.pool.length) return bank[0];
+
+  let r = Math.random() * built.total;
+  for (const [q, w] of built.pool) { r -= w; if (r <= 0) return q; }
+  return built.pool[built.pool.length - 1][0];
 }
 
 /** Topics with >=3 attempts and accuracy under 60%. */

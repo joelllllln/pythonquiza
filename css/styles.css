@@ -74,11 +74,14 @@ h1,h2{margin:0;font-weight:600}
 .view.scroll{display:block;overflow:auto;padding:10px}
 .pane{background:var(--surface);border-radius:var(--r)}
 
-/* Phones and small tablets: ordinary flow, the whole column scrolls. */
-.practice{flex-direction:column;gap:10px;padding:10px;overflow:auto}
+/* Phones and small tablets: ordinary flow, one scroller — the column. The
+   editor grows with the code instead of scrolling inside itself, and its
+   text is 16px because anything smaller makes iOS zoom the page on focus,
+   which then hides the top bar. */
+.practice{flex-direction:column;gap:10px;padding:10px;overflow:auto;-webkit-overflow-scrolling:touch}
 .ask{padding:14px}
 .code{display:flex;flex-direction:column}
-#editor-wrap{height:34vh;overflow:hidden}
+#editor-wrap{height:auto}
 
 /* Desktop: two columns, each filling the window and scrolling inside
    itself, so nothing ever pushes the page taller than the screen. */
@@ -128,8 +131,9 @@ h1,h2{margin:0;font-weight:600}
 }
 .chead.sub{border-bottom:0;border-top:1px solid var(--line);padding:7px 10px 3px}
 
-/* A definite height is what keeps CodeMirror's own scrollbars where they
-   belong — with height:auto it parks the horizontal bar mid-panel. */
+/* On a mouse-driven screen the editor is a fixed-height box that scrolls
+   inside itself; a definite height is what keeps CodeMirror's own scrollbar
+   at the bottom rather than parked mid-panel. */
 .CodeMirror{height:100% !important;background:var(--surface);color:var(--fg);font-size:13.5px;line-height:1.5}
 .CodeMirror-gutters{background:var(--surface);border-right:1px solid var(--line)}
 .CodeMirror-linenumber{color:#3c4450}
@@ -144,6 +148,17 @@ h1,h2{margin:0;font-weight:600}
 .cm-s-default .cm-builtin,.cm-s-default .cm-atom{color:#89ddff}
 .cm-s-default .cm-operator{color:#a5b3c4}
 .cm-s-default .cm-property{color:#e7ebf0}
+
+/* Touch screens: the editor grows with the code, and 16px text stops iOS
+   zooming the page the moment you tap into it. */
+@media(max-width:959px),(pointer:coarse){
+  .CodeMirror{height:auto !important;min-height:200px;font-size:16px;line-height:1.55}
+  .CodeMirror-scroll{overflow-x:hidden !important}
+  .filters input,.filters select{font-size:16px}
+  .out{max-height:none}
+  /* No sideways-scrolling boxes on a touch screen — wrap instead. */
+  .prose pre,.tcase .body{white-space:pre-wrap;word-break:break-word;overflow-x:visible}
+}
 
 /* ---------- console ---------- */
 .console{display:flex;flex-direction:column;padding:0 10px 10px}

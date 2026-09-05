@@ -21,6 +21,7 @@ export function blankProgress() {
     calibrated: false,// has the player picked a starting level?
     offset: 0,        // the "aim easier/harder" slider, in rating points
     feedback: 0,      // how many times they have said too easy / too hard
+    recent: [],       // signatures of the last questions shown, oldest first
     byTopic: {},      // topic -> {attempts, solved, secs}
     byQuestion: {},   // qid   -> {attempts, solved, bestSecs, lastAt, rating}
     history: [],      // newest last: {qid, title, topic, ok, secs, at, rating, delta}
@@ -166,6 +167,7 @@ function trim(p) {
   const q = { ...p };
   q.history = (p.history || []).slice(-250);
   q.curve = (p.curve || []).slice(-400);
+  q.recent = (p.recent || []).slice(-60);
   return q;
 }
 
@@ -184,6 +186,7 @@ export function merge(a, b) {
   out.calibrated = Boolean(a.calibrated || b.calibrated);
   out.offset = newer.offset || 0;
   out.feedback = Math.max(a.feedback || 0, b.feedback || 0);
+  out.recent = (newer.recent || []).slice(-60);
   out.updated = Math.max(a.updated || 0, b.updated || 0);
 
   for (const src of [a, b]) {

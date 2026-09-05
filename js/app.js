@@ -6,7 +6,7 @@ import { buildIndex, getQuestion, templateCount, handwrittenCount } from './bank
 import { firebaseEnabled } from './config.js';
 import {
   START_RATING, levelStr, parSeconds, pickQuestion, feedbackAdjust,
-  updatePlayer, updateQuestion, weakTopics,
+  signature, updatePlayer, updateQuestion, weakTopics,
 } from './rating.js';
 
 const $ = (id) => document.getElementById(id);
@@ -27,6 +27,11 @@ let pyReady = false;
 
 /* ---------------- boot ---------------- */
 
+/** Phones get a different editor: it grows with the code and the page
+ *  scrolls, rather than a small box with its own scrollbar inside a
+ *  scrolling page — two nested scrollers are miserable on a touch screen. */
+const touch = window.matchMedia('(max-width: 959px), (pointer: coarse)').matches;
+
 function boot() {
   editor = CodeMirror.fromTextArea($('editor'), {
     mode: 'python',
@@ -36,13 +41,27 @@ function boot() {
     tabSize: 4,
     indentWithTabs: false,
     autoCloseBrackets: true,
-    viewportMargin: 20,
+    // Wrapping means there is never a horizontal scrollbar to misplace, and
+    // no sideways scrolling on a phone.
+    lineWrapping: true,
+    // contenteditable is much better than a hidden textarea for placing the
+    // caret and dragging a selection on iOS.
+    inputStyle: touch ? 'contenteditable' : 'textarea',
+    viewportMargin: touch ? Infinity : 20,
     extraKeys: {
       'Ctrl-Enter': () => doSubmit(),
       'Cmd-Enter': () => doSubmit(),
       Tab: (cm) => cm.replaceSelection('    '),
     },
   });
+  // iOS autocorrect fights with code: it capitalises keywords and swaps
+  // quotes for smart ones.
+  const input = editor.getInputField();
+  input.setAttribute('autocorrect', 'off');
+  input.setAttribute('autocapitalize', 'off');
+  input.setAttribute('autocomplete', 'off');
+  input.setAttribute('spellcheck', 'false');
+
   editor.on('change', () => { if (q) store.draft(q.id, editor.getValue()); });
 
   wireUI();
@@ -241,6 +260,7 @@ function nextQuestion(forcedId) {
     ? getQuestion(forcedId)
     : getQuestion(pickQuestion(INDEX, store.progress, { target: target(), excludeId: q && q.id }).id);
   q = chosen;
+  rememberShown(q);
   session = { startedAt: Date.now(), failedSubmits: 0, hints: 0, submitted: false, done: false };
 
   const st = store.progress.byQuestion[q.id];
@@ -266,6 +286,15 @@ function nextQuestion(forcedId) {
   updateTargetLabel();
   startTimer();
   window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+/** Keep a short memory of what has been on screen, so it does not recur. */
+function rememberShown(question) {
+  const p = store.progress;
+  p.recent = (p.recent || []).filter((sig) => sig !== signature(question));
+  p.recent.push(signature(question));
+  if (p.recent.length > 60) p.recent = p.recent.slice(-60);
+  store.save();
 }
 
 function startTimer() {
