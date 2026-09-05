@@ -1,7 +1,4 @@
 rules_version = '2';
-
-// Each signed-in player owns exactly one document, keyed by their Google
-// account uid. Nobody can read or write anybody else's.
 service cloud.firestore {
   match /databases/{database}/documents {
     match /users/{uid} {
