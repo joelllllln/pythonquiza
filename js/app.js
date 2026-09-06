@@ -276,6 +276,9 @@ function wireUI() {
 
   $('too-easy').onclick = () => { closeSheets(); rateDifficulty(false); };
   $('too-hard').onclick = () => { closeSheets(); rateDifficulty(true); };
+  $('menu-easy').onclick = () => { closeSheets(); rateDifficulty(false); };
+  $('menu-hard').onclick = () => { closeSheets(); rateDifficulty(true); };
+  $('menu-level').onclick = () => { paintSliderLabel(); openSheet('sheet-level'); };
 
   document.querySelectorAll('.lvl').forEach((b) => {
     b.onclick = () => setLevel(Number(b.dataset.rating));
